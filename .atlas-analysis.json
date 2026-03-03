@@ -1,0 +1,89 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Strapi2Front",
+  "projectDescription": "Generate TypeScript types, services, and framework actions from your Strapi schema",
+  "theme": "palm",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/config-file",
+              "configuration/features",
+              "configuration/output-structure"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/types",
+              "guides/services",
+              "guides/schemas",
+              "guides/relations",
+              "guides/media"
+            ]
+          },
+          {
+            "group": "Framework Integrations",
+            "pages": [
+              "integrations/astro",
+              "integrations/nextjs",
+              "integrations/nuxt"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/cli",
+              "reference/config",
+              "reference/types"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "CLI code generator for Strapi schemas",
+    "TypeScript type generation with full type safety",
+    "Auto-generated API services with CRUD operations",
+    "Zod schema generation for validation",
+    "Framework-specific actions for Astro, Next.js, and Nuxt",
+    "Support for Strapi v4 and v5 with automatic detection",
+    "i18n and localization support",
+    "Draft and publish workflow support"
+  ],
+  "publicApiSurface": [
+    "strapi2front init - Initialize configuration",
+    "strapi2front sync - Sync schema and generate code",
+    "defineConfig() - Define configuration",
+    "loadConfig() - Load configuration file",
+    "fetchSchema() - Fetch Strapi schema",
+    "parseSchema() - Parse Strapi schema",
+    "generateByFeature() - Generate code by feature",
+    "articleService.find() - Find articles",
+    "articleService.findOne() - Find single article",
+    "articleService.create() - Create article",
+    "articleService.update() - Update article",
+    "articleService.delete() - Delete article"
+  ]
+}
