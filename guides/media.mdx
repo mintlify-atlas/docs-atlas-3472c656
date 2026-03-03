@@ -1,0 +1,668 @@
+---
+title: Media & File Uploads
+description: Upload, manage, and display images and files from Strapi
+---
+
+Strapi provides a complete media library for managing images, videos, documents, and other files. strapi2front generates typed helpers for working with media fields and uploading files.
+
+## Media Types
+
+The generated `StrapiMedia` interface represents files in Strapi's media library:
+
+```typescript utils.ts
+export interface StrapiMedia {
+  id: number;
+  documentId: string;  // v5 only
+  name: string;
+  alternativeText: string | null;
+  caption: string | null;
+  width: number;  // For images
+  height: number;  // For images
+  formats: {
+    thumbnail?: StrapiMediaFormat;
+    small?: StrapiMediaFormat;
+    medium?: StrapiMediaFormat;
+    large?: StrapiMediaFormat;
+  } | null;
+  hash: string;
+  ext: string;  // .jpg, .png, .pdf, etc.
+  mime: string;  // image/jpeg, application/pdf, etc.
+  size: number;  // File size in KB
+  url: string;  // Full URL to the file
+  previewUrl: string | null;
+  provider: string;  // local, cloudinary, s3, etc.
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StrapiMediaFormat {
+  name: string;
+  hash: string;
+  ext: string;
+  mime: string;
+  width: number;
+  height: number;
+  size: number;
+  url: string;
+}
+```
+
+## Single vs Multiple Media Fields
+
+Strapi media fields can be single or multiple:
+
+```typescript article.ts
+import type { StrapiMedia } from '../utils';
+
+export interface Article extends StrapiBaseEntity {
+  title: string;
+  
+  // Single media field (nullable)
+  coverImage: StrapiMedia | null;
+  
+  // Multiple media field (array)
+  gallery: StrapiMedia[];
+}
+```
+
+## Displaying Media
+
+### Display Images
+
+<CodeGroup>
+```astro Basic Image
+---
+import type { Article } from '@/strapi/collections/article/types';
+
+interface Props {
+  article: Article;
+}
+
+const { article } = Astro.props;
+---
+
+{article.coverImage && (
+  <img 
+    src={article.coverImage.url} 
+    alt={article.coverImage.alternativeText || article.title}
+    width={article.coverImage.width}
+    height={article.coverImage.height}
+  />
+)}
+```
+
+```astro Responsive Image
+---
+const { article } = Astro.props;
+const cover = article.coverImage;
+---
+
+{cover && (
+  <picture>
+    {cover.formats?.large && (
+      <source 
+        media="(min-width: 1024px)" 
+        srcset={cover.formats.large.url}
+      />
+    )}
+    {cover.formats?.medium && (
+      <source 
+        media="(min-width: 768px)" 
+        srcset={cover.formats.medium.url}
+      />
+    )}
+    {cover.formats?.small && (
+      <source 
+        media="(min-width: 480px)" 
+        srcset={cover.formats.small.url}
+      />
+    )}
+    <img 
+      src={cover.url} 
+      alt={cover.alternativeText || ''}
+      loading="lazy"
+    />
+  </picture>
+)}
+```
+
+```astro Image Gallery
+---
+const { article } = Astro.props;
+---
+
+<div class="gallery">
+  {article.gallery.map(image => (
+    <figure>
+      <img 
+        src={image.formats?.medium?.url || image.url}
+        alt={image.alternativeText || ''}
+        width={image.formats?.medium?.width || image.width}
+        height={image.formats?.medium?.height || image.height}
+        loading="lazy"
+      />
+      {image.caption && <figcaption>{image.caption}</figcaption>}
+    </figure>
+  ))}
+</div>
+```
+</CodeGroup>
+
+### Image Formats
+
+Strapi automatically generates multiple sizes for images:
+
+<Tabs>
+  <Tab title="thumbnail">
+    Small preview (typically 156x156 or 245x156)
+    ```typescript
+    const thumb = image.formats?.thumbnail?.url;
+    ```
+  </Tab>
+  <Tab title="small">
+    Small size (max 500px)
+    ```typescript
+    const small = image.formats?.small?.url;
+    ```
+  </Tab>
+  <Tab title="medium">
+    Medium size (max 750px)
+    ```typescript
+    const medium = image.formats?.medium?.url;
+    ```
+  </Tab>
+  <Tab title="large">
+    Large size (max 1000px)
+    ```typescript
+    const large = image.formats?.large?.url;
+    ```
+  </Tab>
+  <Tab title="original">
+    Original uploaded file
+    ```typescript
+    const original = image.url;
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+Not all formats are generated for every image. Small images may only have a thumbnail or no formats at all. Always check if a format exists before using it.
+</Info>
+
+### Display Non-Image Files
+
+```astro Document Download
+---
+const { document } = Astro.props;
+---
+
+{document && (
+  <a href={document.url} download>
+    <span>Download {document.name}</span>
+    <span class="size">{(document.size / 1024).toFixed(2)} MB</span>
+    <span class="type">{document.ext}</span>
+  </a>
+)}
+```
+
+## Uploading Files
+
+strapi2front generates file upload helpers via the Strapi client.
+
+### Upload Process
+
+File uploads in Strapi are a **two-step process**:
+
+<Steps>
+  <Step title="Upload the file">
+    Upload file to Strapi's media library via the upload API
+  </Step>
+  <Step title="Link to content">
+    Use the returned file ID to link it to your content type
+  </Step>
+</Steps>
+
+### Generated Upload Helpers
+
+The client includes typed file upload methods:
+
+```typescript client.ts
+export interface StrapiFileInfo {
+  name?: string;
+  alternativeText?: string;
+  caption?: string;
+}
+
+export const files = {
+  /**
+   * Upload a file to Strapi media library
+   */
+  async upload(file: File | Blob, options?: { fileInfo?: StrapiFileInfo }): Promise<StrapiMedia> {
+    const response = await strapiClient.files.upload(file, options);
+    return response;
+  },
+  
+  /**
+   * Find files in media library
+   */
+  async find(params?: Record<string, unknown>): Promise<StrapiMedia[]> {
+    const response = await strapiClient.files.find(params);
+    return Array.isArray(response) ? response : [];
+  },
+  
+  /**
+   * Find one file by ID
+   */
+  async findOne(fileId: number): Promise<StrapiMedia> {
+    const response = await strapiClient.files.findOne(fileId);
+    return response;
+  },
+  
+  /**
+   * Update file metadata
+   */
+  async update(fileId: number, fileInfo: StrapiFileInfo): Promise<StrapiMedia> {
+    const response = await strapiClient.files.update(fileId, fileInfo);
+    return response;
+  },
+  
+  /**
+   * Delete a file
+   */
+  async delete(fileId: number): Promise<StrapiMedia> {
+    const response = await strapiClient.files.delete(fileId);
+    return response;
+  },
+};
+```
+
+### Upload Examples
+
+<Tabs>
+  <Tab title="Basic Upload">
+    ```typescript
+    import { files } from '@/strapi/client';
+    
+    async function uploadImage(file: File) {
+      // Upload file to media library
+      const uploadedFile = await files.upload(file, {
+        fileInfo: {
+          name: 'My Image',
+          alternativeText: 'Description of the image',
+          caption: 'Photo caption',
+        },
+      });
+      
+      console.log('Uploaded:', uploadedFile);
+      console.log('File ID:', uploadedFile.id);
+      console.log('File URL:', uploadedFile.url);
+      
+      return uploadedFile;
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Upload & Link">
+    ```typescript
+    import { files } from '@/strapi/client';
+    import { articleService } from '@/strapi/collections/article/service';
+    
+    async function createArticleWithImage(
+      articleData: { title: string; slug: string },
+      coverImageFile: File
+    ) {
+      // Step 1: Upload the image
+      const uploadedImage = await files.upload(coverImageFile, {
+        fileInfo: {
+          alternativeText: articleData.title,
+        },
+      });
+      
+      // Step 2: Create article with the image ID
+      const article = await articleService.create({
+        ...articleData,
+        coverImage: uploadedImage.id,  // Link using file ID
+      });
+      
+      return article;
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Multiple Files">
+    ```typescript
+    import { files } from '@/strapi/client';
+    import { articleService } from '@/strapi/collections/article/service';
+    
+    async function uploadGallery(imageFiles: File[]) {
+      // Upload all files in parallel
+      const uploadPromises = imageFiles.map(file => 
+        files.upload(file, {
+          fileInfo: {
+            alternativeText: file.name,
+          },
+        })
+      );
+      
+      const uploadedFiles = await Promise.all(uploadPromises);
+      
+      // Get array of file IDs
+      const fileIds = uploadedFiles.map(f => f.id);
+      
+      // Link to article
+      await articleService.update('article-123', {
+        gallery: fileIds,
+      });
+      
+      return uploadedFiles;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Upload in Forms
+
+### Browser Form Upload
+
+```astro components/ArticleForm.astro
+<form id="article-form">
+  <div>
+    <label for="title">Title</label>
+    <input type="text" id="title" name="title" required />
+  </div>
+  
+  <div>
+    <label for="cover">Cover Image</label>
+    <input type="file" id="cover" name="cover" accept="image/*" />
+  </div>
+  
+  <div>
+    <label for="gallery">Gallery (Multiple)</label>
+    <input type="file" id="gallery" name="gallery" accept="image/*" multiple />
+  </div>
+  
+  <button type="submit">Create Article</button>
+</form>
+
+<script>
+  import { files } from '@/strapi/client';
+  import { articleService } from '@/strapi/collections/article/service';
+  
+  const form = document.getElementById('article-form') as HTMLFormElement;
+  
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(form);
+    const title = formData.get('title') as string;
+    const coverFile = formData.get('cover') as File;
+    const galleryFiles = formData.getAll('gallery') as File[];
+    
+    try {
+      // Upload cover image
+      let coverId = null;
+      if (coverFile && coverFile.size > 0) {
+        const uploadedCover = await files.upload(coverFile, {
+          fileInfo: { alternativeText: title },
+        });
+        coverId = uploadedCover.id;
+      }
+      
+      // Upload gallery images
+      const galleryIds: number[] = [];
+      for (const file of galleryFiles) {
+        if (file.size > 0) {
+          const uploaded = await files.upload(file);
+          galleryIds.push(uploaded.id);
+        }
+      }
+      
+      // Create article with uploaded files
+      const article = await articleService.create({
+        title,
+        slug: title.toLowerCase().replace(/\s+/g, '-'),
+        coverImage: coverId,
+        gallery: galleryIds,
+      });
+      
+      console.log('Article created:', article);
+      window.location.href = `/blog/${article.slug}`;
+    } catch (error) {
+      console.error('Upload failed:', error);
+    }
+  });
+</script>
+```
+
+### React Form Upload
+
+```typescript components/UploadForm.tsx
+import { useState } from 'react';
+import { files } from '@/strapi/client';
+import { articleService } from '@/strapi/collections/article/service';
+
+export function UploadForm() {
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverFile(file);
+      // Create preview
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+    }
+  };
+  
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setUploading(true);
+    
+    try {
+      const formData = new FormData(e.currentTarget);
+      const title = formData.get('title') as string;
+      
+      let coverId = null;
+      if (coverFile) {
+        const uploaded = await files.upload(coverFile, {
+          fileInfo: {
+            alternativeText: title,
+            caption: 'Article cover image',
+          },
+        });
+        coverId = uploaded.id;
+      }
+      
+      const article = await articleService.create({
+        title,
+        slug: title.toLowerCase().replace(/\s+/g, '-'),
+        coverImage: coverId,
+      });
+      
+      console.log('Success:', article);
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setUploading(false);
+    }
+  };
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="text" name="title" required />
+      
+      <div>
+        <input 
+          type="file" 
+          accept="image/*" 
+          onChange={handleFileChange}
+        />
+        {previewUrl && (
+          <img src={previewUrl} alt="Preview" width={200} />
+        )}
+      </div>
+      
+      <button type="submit" disabled={uploading}>
+        {uploading ? 'Uploading...' : 'Create Article'}
+      </button>
+    </form>
+  );
+}
+```
+
+## Update Media Fields
+
+<Tabs>
+  <Tab title="Replace Single Media">
+    ```typescript
+    // Upload new image
+    const newImage = await files.upload(file);
+    
+    // Replace existing cover image
+    await articleService.update('article-123', {
+      coverImage: newImage.id,
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Remove Single Media">
+    ```typescript
+    // Remove cover image
+    await articleService.update('article-123', {
+      coverImage: null,
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Add to Gallery">
+    ```typescript
+    // Get existing article
+    const article = await articleService.findOne('article-123', {
+      populate: ['gallery'],
+    });
+    
+    // Upload new image
+    const newImage = await files.upload(file);
+    
+    // Add to existing gallery
+    const currentIds = article.gallery.map(img => img.id);
+    await articleService.update('article-123', {
+      gallery: [...currentIds, newImage.id],
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Remove from Gallery">
+    ```typescript
+    // Remove specific image from gallery
+    const article = await articleService.findOne('article-123', {
+      populate: ['gallery'],
+    });
+    
+    const updatedIds = article.gallery
+      .filter(img => img.id !== imageIdToRemove)
+      .map(img => img.id);
+    
+    await articleService.update('article-123', {
+      gallery: updatedIds,
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## File Validation
+
+Validate files before upload:
+
+```typescript utils/validation.ts
+export function validateImage(file: File): { valid: boolean; error?: string } {
+  // Check file type
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  if (!allowedTypes.includes(file.type)) {
+    return { valid: false, error: 'File must be an image (JPEG, PNG, WebP, or GIF)' };
+  }
+  
+  // Check file size (max 5MB)
+  const maxSize = 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    return { valid: false, error: 'File must be smaller than 5MB' };
+  }
+  
+  return { valid: true };
+}
+
+// Usage
+const validation = validateImage(file);
+if (!validation.valid) {
+  alert(validation.error);
+  return;
+}
+
+const uploaded = await files.upload(file);
+```
+
+## Optimize Images
+
+Use Strapi's generated formats for optimal performance:
+
+```astro components/OptimizedImage.astro
+---
+import type { StrapiMedia } from '@/strapi/utils';
+
+interface Props {
+  image: StrapiMedia;
+  alt?: string;
+  sizes?: string;
+}
+
+const { image, alt, sizes = '100vw' } = Astro.props;
+
+// Build srcset from available formats
+const srcset = [
+  image.formats?.small && `${image.formats.small.url} ${image.formats.small.width}w`,
+  image.formats?.medium && `${image.formats.medium.url} ${image.formats.medium.width}w`,
+  image.formats?.large && `${image.formats.large.url} ${image.formats.large.width}w`,
+  `${image.url} ${image.width}w`,
+].filter(Boolean).join(', ');
+---
+
+<img
+  src={image.formats?.medium?.url || image.url}
+  srcset={srcset}
+  sizes={sizes}
+  alt={alt || image.alternativeText || ''}
+  width={image.width}
+  height={image.height}
+  loading="lazy"
+  decoding="async"
+/>
+```
+
+Usage:
+
+```astro
+<OptimizedImage 
+  image={article.coverImage} 
+  alt={article.title}
+  sizes="(max-width: 768px) 100vw, 50vw"
+/>
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Relations" icon="link" href="/guides/relations">
+    Work with related content types
+  </Card>
+  <Card title="Services" icon="code" href="/guides/services">
+    Learn about data fetching methods
+  </Card>
+  <Card title="Schemas" icon="shield-check" href="/guides/schemas">
+    Validate file uploads with Zod
+  </Card>
+  <Card title="Types" icon="shield" href="/guides/types">
+    Understand media type definitions
+  </Card>
+</CardGroup>

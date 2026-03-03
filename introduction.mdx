@@ -1,0 +1,276 @@
+---
+title: Introduction
+description: Generate TypeScript types, services, Zod schemas, and framework actions from your Strapi CMS schema
+---
+
+# Introduction to Strapi2Front
+
+Strapi2Front is a powerful CLI tool that automatically generates type-safe TypeScript code from your Strapi CMS schema. Stop writing boilerplate code and let Strapi2Front handle types, services, validation schemas, and server actions for you.
+
+## What is Strapi2Front?
+
+Strapi2Front bridges the gap between your Strapi backend and frontend applications by:
+
+- **Auto-generating TypeScript types** from your Strapi content types
+- **Creating type-safe service functions** for data fetching
+- **Building Zod validation schemas** for forms and data validation
+- **Generating framework-specific actions** (Astro, Next.js, Nuxt, and more)
+- **Supporting both Strapi v4 and v5** with intelligent version detection
+- **Working with JavaScript projects** via JSDoc annotations (no TypeScript required)
+
+<CardGroup cols={2}>
+  <Card title="Type Safety" icon="shield-check">
+    End-to-end type safety from your CMS to your frontend components
+  </Card>
+  <Card title="Zero Boilerplate" icon="wand-magic-sparkles">
+    Generate thousands of lines of code with a single command
+  </Card>
+  <Card title="Framework Agnostic" icon="layer-group">
+    Works with Astro, Next.js, Nuxt, SvelteKit, and any TypeScript/JavaScript project
+  </Card>
+  <Card title="Always in Sync" icon="arrows-rotate">
+    Keep your frontend types synchronized with your Strapi schema
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### TypeScript & JSDoc Support
+
+Strapi2Front works with both TypeScript and JavaScript projects:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    // Generated types for your Article collection
+    export interface Article {
+      documentId: string;
+      title: string;
+      content: string;
+      author: Author;
+      publishedAt: string | null;
+      locale: string;
+    }
+    
+    // Type-safe service functions
+    export const getArticles = async (): Promise<Article[]> => {
+      const response = await client.from('articles').findMany();
+      return response.data;
+    };
+    ```
+  </Tab>
+  <Tab title="JavaScript (JSDoc)">
+    ```javascript
+    /**
+     * @typedef {Object} Article
+     * @property {string} documentId
+     * @property {string} title
+     * @property {string} content
+     * @property {Author} author
+     * @property {string | null} publishedAt
+     * @property {string} locale
+     */
+    
+    /**
+     * @returns {Promise<Article[]>}
+     */
+    export const getArticles = async () => {
+      const response = await client.from('articles').findMany();
+      return response.data;
+    };
+    ```
+  </Tab>
+</Tabs>
+
+### Generated Code Structure
+
+Strapi2Front uses a **by-feature structure** (screaming architecture) that organizes code by content type:
+
+```
+src/strapi/
+├── collections/
+│   ├── article/
+│   │   ├── types.ts       # TypeScript interfaces
+│   │   ├── schemas.ts     # Zod validation schemas
+│   │   ├── service.ts     # CRUD functions
+│   │   └── actions.ts     # Framework actions
+│   └── author/
+│       ├── types.ts
+│       ├── schemas.ts
+│       └── service.ts
+├── singles/
+│   └── homepage/
+│       ├── types.ts
+│       ├── schemas.ts
+│       └── service.ts
+├── components/
+│   ├── seo.ts
+│   └── hero.ts
+└── shared/
+    ├── utils.ts           # Shared utilities
+    ├── client.ts          # Configured Strapi client
+    ├── locales.ts         # i18n locales
+    └── upload-action.ts   # File upload helpers
+```
+
+### Form Validation with Zod
+
+Generate ready-to-use Zod schemas for form validation:
+
+<CodeGroup>
+```typescript React Hook Form
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { createArticleSchema } from '@/strapi/collections/article/schemas';
+
+function ArticleForm() {
+  const form = useForm({
+    resolver: zodResolver(createArticleSchema),
+  });
+  
+  // Form is now fully type-safe with validation
+}
+```
+
+```typescript TanStack Form
+import { useForm } from '@tanstack/react-form';
+import { zodValidator } from '@tanstack/zod-form-adapter';
+import { createArticleSchema } from '@/strapi/collections/article/schemas';
+
+function ArticleForm() {
+  const form = useForm({
+    validatorAdapter: zodValidator(),
+    validators: {
+      onChange: createArticleSchema,
+    },
+  });
+}
+```
+</CodeGroup>
+
+### Framework-Specific Actions
+
+Generate type-safe server actions for your framework:
+
+<Tabs>
+  <Tab title="Astro">
+    ```typescript
+    // Generated Astro actions
+    import { actions } from 'astro:actions';
+    
+    const { data, error } = await actions.article.create({
+      title: 'My Article',
+      content: 'Article content...',
+      publishedAt: new Date().toISOString(),
+    });
+    ```
+  </Tab>
+  <Tab title="Next.js">
+    <Note>Next.js actions support coming soon</Note>
+  </Tab>
+  <Tab title="Nuxt">
+    <Note>Nuxt server routes support coming soon</Note>
+  </Tab>
+</Tabs>
+
+### File Upload Support
+
+Built-in file upload helpers for browser and server:
+
+```typescript
+import { uploadFile } from '@/strapi/shared/upload-action';
+
+const file = document.querySelector('input[type="file"]').files[0];
+const { data, error } = await uploadFile(file);
+
+if (data) {
+  console.log('Uploaded:', data.id, data.url);
+}
+```
+
+## Supported Strapi Versions
+
+<CardGroup cols={2}>
+  <Card title="Strapi v5" icon="5">
+    Full support with automatic version detection and Document Service API
+  </Card>
+  <Card title="Strapi v4" icon="4">
+    Complete compatibility with Entity Service API and legacy schemas
+  </Card>
+</CardGroup>
+
+## Requirements
+
+<Steps>
+  <Step title="Node.js 18+">
+    Strapi2Front requires Node.js version 18 or higher
+  </Step>
+  <Step title="Strapi v4 or v5">
+    Works with both Strapi v4 and v5 backends
+  </Step>
+  <Step title="Package Manager">
+    Compatible with npm, pnpm, yarn, and bun
+  </Step>
+</Steps>
+
+## How It Works
+
+<Steps>
+  <Step title="Configure Connection">
+    Run `npx strapi2front init` to set up your Strapi connection and preferences
+  </Step>
+  <Step title="Sync Schema">
+    Run `npx strapi2front sync` to fetch your Strapi schema and generate code
+  </Step>
+  <Step title="Use Generated Code">
+    Import types, services, and actions in your frontend application
+  </Step>
+  <Step title="Stay Synchronized">
+    Re-run sync whenever your Strapi schema changes
+  </Step>
+</Steps>
+
+## Framework Support
+
+| Framework      | Types | Services | Schemas | Actions |
+| -------------- | ----- | -------- | ------- | ------- |
+| Astro 4+       | ✅     | ✅        | ✅       | ✅       |
+| Next.js        | ✅     | ✅        | ✅       | 🔜      |
+| Nuxt           | ✅     | ✅        | ✅       | 🔜      |
+| SvelteKit      | ✅     | ✅        | ✅       | 🔜      |
+| TanStack Start | ✅     | ✅        | ✅       | 🔜      |
+| Any Framework  | ✅     | ✅        | ✅       | -       |
+
+<Info>
+Types, Services, and Schemas work with **any** TypeScript or JavaScript framework. Framework-specific Actions are being added progressively.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get up and running in 2 minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Detailed installation and setup guide
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Configure Strapi2Front for your project
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli-reference">
+    Complete command-line interface documentation
+  </Card>
+</CardGroup>
+
+## Community & Support
+
+Strapi2Front is open source and built with ❤️ by [Eleven Estudio](https://elevenestudio.com).
+
+<CardGroup cols={2}>
+  <Card title="GitHub" icon="github" href="https://github.com/eleven-estudio/strapi2front">
+    View source code and contribute
+  </Card>
+  <Card title="Report Issues" icon="bug" href="https://github.com/eleven-estudio/strapi2front/issues">
+    Found a bug? Let us know
+  </Card>
+</CardGroup>

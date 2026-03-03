@@ -1,0 +1,279 @@
+---
+title: CLI Reference
+description: Complete command-line interface reference for strapi2front with all commands, flags, and options
+---
+
+The `strapi2front` CLI provides commands to initialize your project and sync types, services, and actions from your Strapi schema.
+
+## Installation
+
+```bash
+npm install -D strapi2front
+```
+
+## Commands
+
+### `init`
+
+Initialize strapi2front in your project. Creates configuration files, sets up environment variables, and installs dependencies.
+
+```bash
+npx strapi2front init [options]
+```
+
+<Info>
+If you run `strapi2front` without any command, it defaults to running `init`.
+</Info>
+
+#### Options
+
+<ParamField path="-y, --yes" type="boolean" default={false}>
+  Skip interactive prompts and use default values for all options.
+</ParamField>
+
+<ParamField path="--url" type="string">
+  Strapi URL to connect to (e.g., `http://localhost:1337`). If not provided, you'll be prompted during setup.
+</ParamField>
+
+<ParamField path="--token" type="string">
+  Strapi sync token with `STRAPI_SYNC_TOKEN` permissions. Required for fetching schema. If not provided, you'll be prompted.
+</ParamField>
+
+<ParamField path="--framework" type="string">
+  Framework to use for action generation. Currently supports `astro`. Auto-detected if not specified.
+</ParamField>
+
+#### What it does
+
+The `init` command performs the following steps:
+
+1. **Detects project configuration**: Framework, TypeScript usage, and package manager
+2. **Runs interactive prompts**: Collects configuration options through guided questions
+3. **Creates configuration file**: Generates `strapi.config.ts` (or `.js` for JSDoc projects)
+4. **Updates environment files**: 
+   - Appends variables to `.env` (creates if needed)
+   - Creates `.env.example` with token documentation
+5. **Creates output directory**: Sets up the directory structure for generated files
+6. **Installs dependencies**: Optionally installs `strapi2front` (dev) and `@strapi/client`
+
+#### Environment Variables
+
+The init command creates the following environment variables:
+
+<ResponseField name="STRAPI_URL" type="string" required>
+  Your Strapi backend URL (e.g., `http://localhost:1337` or `https://api.example.com`)
+</ResponseField>
+
+<ResponseField name="STRAPI_SYNC_TOKEN" type="string" required>
+  **Development only** - Token for syncing schema from Strapi.
+  
+  **Permissions required:**
+  - `content-type-builder.getContentTypes`
+  - `content-type-builder.getComponents`
+  - `i18n.listLocales`
+  
+  <Warning>Do NOT deploy this token to production</Warning>
+</ResponseField>
+
+<ResponseField name="STRAPI_TOKEN" type="string">
+  **Production** - Token for your frontend app to fetch content. Configure with only the permissions your app needs.
+</ResponseField>
+
+<ResponseField name="PUBLIC_STRAPI_URL" type="string">
+  Public URL for browser-side uploads (only if upload feature is enabled)
+</ResponseField>
+
+<ResponseField name="PUBLIC_STRAPI_UPLOAD_TOKEN" type="string">
+  Upload token with `Upload > upload` permission only (no delete/update)
+</ResponseField>
+
+#### Examples
+
+<CodeGroup>
+```bash Interactive (recommended)
+npx strapi2front init
+```
+
+```bash Non-interactive
+npx strapi2front init --yes --url http://localhost:1337 --token your-token
+```
+
+```bash With framework specified
+npx strapi2front init --framework astro
+```
+</CodeGroup>
+
+---
+
+### `sync`
+
+Sync types, schemas, services, actions, and upload helpers from your Strapi schema. This is the main command you'll run after making changes to your Strapi content types.
+
+```bash
+npx strapi2front sync [options]
+```
+
+#### Options
+
+<ParamField path="-f, --force" type="boolean" default={false}>
+  Force regeneration of all files, even if they haven't changed.
+</ParamField>
+
+<ParamField path="--types-only" type="boolean" default={false}>
+  Only generate TypeScript type definitions. Skips services, actions, schemas, and upload helpers.
+</ParamField>
+
+<ParamField path="--services-only" type="boolean" default={false}>
+  Only generate service files for API calls. Skips types, actions, schemas, and upload helpers.
+</ParamField>
+
+<ParamField path="--actions-only" type="boolean" default={false}>
+  Only generate framework actions (Astro actions). Skips types, services, schemas, and upload helpers.
+  
+  <Note>Only available when `outputFormat: "typescript"` in config</Note>
+</ParamField>
+
+<ParamField path="--schemas-only" type="boolean" default={false}>
+  Only generate Zod validation schemas. Skips types, services, actions, and upload helpers.
+</ParamField>
+
+<ParamField path="--upload-only" type="boolean" default={false}>
+  Only generate upload helpers (action + public client). Skips types, services, actions, and schemas.
+</ParamField>
+
+#### What it does
+
+The `sync` command:
+
+1. **Loads configuration** from `strapi.config.ts`
+2. **Detects Strapi version** (v4 or v5) and warns if config mismatch
+3. **Fetches schema** from Strapi API (content types, components, locales)
+4. **Checks for Blocks fields** and prompts to install `@strapi/blocks-react-renderer` if needed
+5. **Generates files** based on your feature configuration:
+   - **Types**: TypeScript interfaces for all content types and components
+   - **Services**: API client methods for CRUD operations
+   - **Actions**: Framework-specific server actions (Astro)
+   - **Schemas**: Zod validation schemas for forms
+   - **Upload**: File upload helpers for client and server
+6. **Displays summary** of generated files
+
+#### Generated File Structure
+
+With all features enabled, sync generates:
+
+```
+src/strapi/
+├── collections/
+│   ├── article.ts         # Types, service, action, schema
+│   ├── author.ts
+│   └── ...
+├── singles/
+│   ├── homepage.ts
+│   └── ...
+├── components/
+│   ├── layout/
+│   │   └── hero.ts
+│   └── ...
+└── upload/
+    ├── action.ts          # Server action for uploads
+    └── client.ts          # Public upload client
+```
+
+#### Examples
+
+<CodeGroup>
+```bash Full sync
+npx strapi2front sync
+```
+
+```bash Force regeneration
+npx strapi2front sync --force
+```
+
+```bash Types only
+npx strapi2front sync --types-only
+```
+
+```bash Services and types
+npx strapi2front sync --types-only --services-only
+```
+</CodeGroup>
+
+<Tip>
+Add `strapi2front sync` to your `package.json` scripts for easier access:
+
+```json
+{
+  "scripts": {
+    "strapi:sync": "strapi2front sync"
+  }
+}
+```
+</Tip>
+
+---
+
+## Global Options
+
+These options are available for all commands:
+
+<ParamField path="--help, -h" type="boolean">
+  Display help information for a command.
+</ParamField>
+
+<ParamField path="--version, -V" type="boolean">
+  Display the installed strapi2front version.
+</ParamField>
+
+---
+
+## Exit Codes
+
+<ResponseField name="0" type="success">
+  Command completed successfully
+</ResponseField>
+
+<ResponseField name="1" type="error">
+  Command failed with error (check error message)
+</ResponseField>
+
+---
+
+## Package Manager Detection
+
+The CLI automatically detects your package manager based on lockfiles:
+
+- `bun.lockb` → Bun
+- `pnpm-lock.yaml` → pnpm  
+- `yarn.lock` → Yarn
+- Default → npm
+
+Install commands are adjusted accordingly for dependency installation.
+
+---
+
+## TypeScript Interfaces
+
+The CLI exports TypeScript interfaces for programmatic usage:
+
+```typescript
+import type { InitCommandOptions, SyncCommandOptions } from 'strapi2front';
+
+const initOptions: InitCommandOptions = {
+  yes: true,
+  url: 'http://localhost:1337',
+  token: 'your-token',
+  framework: 'astro'
+};
+
+const syncOptions: SyncCommandOptions = {
+  force: false,
+  typesOnly: false,
+  servicesOnly: false,
+  actionsOnly: false,
+  schemasOnly: false,
+  uploadOnly: false
+};
+```
+
+See the [Types Reference](/reference/types) for complete type definitions.

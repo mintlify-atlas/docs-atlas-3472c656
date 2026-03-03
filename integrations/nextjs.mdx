@@ -1,0 +1,641 @@
+---
+title: "Next.js Integration"
+description: "Use Strapi2Front with Next.js for type-safe data fetching and Server Actions"
+---
+
+<Info>
+  **Prerequisites**:
+  - Next.js 14.0 or higher (for Server Actions)
+  - TypeScript enabled in your Next.js project
+  - Strapi v4 or v5 backend
+</Info>
+
+Strapi2Front generates TypeScript types, services, and Zod schemas for your Next.js applications. Server Actions generation for Next.js is coming soon.
+
+## Current Support
+
+<CardGroup cols={2}>
+  <Card title="TypeScript Types" icon="check">
+    Fully typed interfaces for all content types
+  </Card>
+  
+  <Card title="Service Functions" icon="check">
+    Ready-to-use data fetching functions
+  </Card>
+  
+  <Card title="Zod Schemas" icon="check">
+    Validation schemas for forms and mutations
+  </Card>
+  
+  <Card title="Server Actions" icon="clock">
+    Coming soon in a future release
+  </Card>
+</CardGroup>
+
+## Setup
+
+<Steps>
+<Step title="Install Strapi2Front">
+
+Install the package in your Next.js project:
+
+```bash
+npm install strapi2front
+```
+
+</Step>
+
+<Step title="Initialize Configuration">
+
+Run the init command to create a configuration file:
+
+```bash
+npx strapi2front init
+```
+
+</Step>
+
+<Step title="Configure for Next.js">
+
+Update your `strapi2front.config.ts`:
+
+```typescript strapi2front.config.ts
+import { defineConfig } from 'strapi2front';
+
+export default defineConfig({
+  strapiUrl: process.env.NEXT_PUBLIC_STRAPI_URL || 'http://localhost:1337',
+  strapiVersion: 'v5', // or 'v4'
+  output: {
+    path: './src/lib/strapi',
+    structure: 'by-feature',
+  },
+  features: {
+    types: true,
+    services: true,
+    schemas: true,
+    // Server Actions coming soon
+  },
+});
+```
+
+</Step>
+
+<Step title="Add Environment Variables">
+
+Create a `.env.local` file:
+
+```bash .env.local
+NEXT_PUBLIC_STRAPI_URL=https://your-strapi-instance.com
+STRAPI_API_TOKEN=your-api-token-here
+```
+
+</Step>
+
+<Step title="Generate Code">
+
+Run the sync command:
+
+```bash
+npx strapi2front sync
+```
+
+This generates:
+
+```
+src/lib/strapi/
+├── collections/
+│   └── article/
+│       ├── types.ts
+│       ├── schemas.ts
+│       └── service.ts
+├── singles/
+│   └── homepage/
+│       ├── types.ts
+│       ├── schemas.ts
+│       └── service.ts
+└── shared/
+    ├── client.ts
+    └── utils.ts
+```
+
+</Step>
+</Steps>
+
+## Usage
+
+### Server Components
+
+Fetch data in React Server Components using the generated services:
+
+<CodeGroup>
+```typescript app/blog/page.tsx
+import { articleService } from '@/lib/strapi/collections/article/service';
+
+export default async function BlogPage() {
+  // Fetch articles with pagination
+  const { data: articles, pagination } = await articleService.findMany({
+    pagination: {
+      page: 1,
+      pageSize: 10,
+    },
+    sort: ['publishedAt:desc'],
+    populate: ['author', 'coverImage'],
+  });
+
+  return (
+    <div className="blog-grid">
+      {articles.map((article) => (
+        <article key={article.documentId}>
+          <h2>{article.title}</h2>
+          <p>{article.excerpt}</p>
+          <a href={`/blog/${article.slug}`}>Read more</a>
+        </article>
+      ))}
+      
+      <Pagination 
+        currentPage={pagination.page}
+        totalPages={pagination.pageCount}
+      />
+    </div>
+  );
+}
+```
+
+```typescript app/blog/[slug]/page.tsx
+import { articleService } from '@/lib/strapi/collections/article/service';
+import { notFound } from 'next/navigation';
+
+interface PageProps {
+  params: { slug: string };
+}
+
+export default async function ArticlePage({ params }: PageProps) {
+  // Fetch article by slug
+  const article = await articleService.findBySlug(params.slug, {
+    populate: ['author', 'categories', 'coverImage'],
+  });
+
+  if (!article) {
+    notFound();
+  }
+
+  return (
+    <article>
+      <h1>{article.title}</h1>
+      <div className="author">
+        By {article.author.name}
+      </div>
+      <div dangerouslySetInnerHTML={{ __html: article.content }} />
+    </article>
+  );
+}
+
+// Generate static params for SSG
+export async function generateStaticParams() {
+  const articles = await articleService.findAll({
+    populate: ['slug'],
+  });
+
+  return articles.map((article) => ({
+    slug: article.slug,
+  }));
+}
+```
+</CodeGroup>
+
+### Client Components with SWR
+
+Use SWR for client-side data fetching:
+
+<CodeGroup>
+```typescript components/ArticleList.tsx
+'use client';
+
+import useSWR from 'swr';
+import type { Article } from '@/lib/strapi/collections/article/types';
+import type { StrapiPagination } from '@/lib/strapi/shared/utils';
+
+interface ArticleResponse {
+  data: Article[];
+  pagination: StrapiPagination;
+}
+
+const fetcher = (url: string) => fetch(url).then(r => r.json());
+
+export function ArticleList() {
+  const { data, error, isLoading } = useSWR<ArticleResponse>(
+    '/api/articles',
+    fetcher
+  );
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Failed to load articles</div>;
+  if (!data) return null;
+
+  return (
+    <div className="article-list">
+      {data.data.map((article) => (
+        <div key={article.documentId}>
+          <h3>{article.title}</h3>
+          <p>{article.excerpt}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+```typescript app/api/articles/route.ts
+import { articleService } from '@/lib/strapi/collections/article/service';
+import { NextResponse } from 'next/server';
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const page = parseInt(searchParams.get('page') || '1');
+  const pageSize = parseInt(searchParams.get('pageSize') || '10');
+
+  try {
+    const result = await articleService.findMany({
+      pagination: { page, pageSize },
+      sort: ['publishedAt:desc'],
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to fetch articles' },
+      { status: 500 }
+    );
+  }
+}
+```
+</CodeGroup>
+
+### Route Handlers
+
+Create API routes using the generated services:
+
+```typescript app/api/contact/route.ts
+import { contactService } from '@/lib/strapi/collections/contact/service';
+import { contactSchema } from '@/lib/strapi/collections/contact/schemas';
+import { NextResponse } from 'next/server';
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    
+    // Validate with Zod schema
+    const validatedData = contactSchema.parse(body);
+    
+    // Create contact entry
+    const contact = await contactService.create(validatedData);
+    
+    return NextResponse.json({ success: true, data: contact });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: error.errors },
+        { status: 400 }
+      );
+    }
+    
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### Form Handling with React Hook Form
+
+Use Zod schemas with React Hook Form:
+
+```typescript components/ContactForm.tsx
+'use client';
+
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { contactSchema } from '@/lib/strapi/collections/contact/schemas';
+import type { z } from 'zod';
+
+type ContactFormData = z.infer<typeof contactSchema>;
+
+export function ContactForm() {
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ContactFormData>({
+    resolver: zodResolver(contactSchema),
+  });
+
+  const onSubmit = async (data: ContactFormData) => {
+    const response = await fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (response.ok) {
+      alert('Message sent successfully!');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <input {...register('name')} placeholder="Name" />
+      {errors.name && <span>{errors.name.message}</span>}
+
+      <input {...register('email')} type="email" placeholder="Email" />
+      {errors.email && <span>{errors.email.message}</span>}
+
+      <textarea {...register('message')} placeholder="Message" />
+      {errors.message && <span>{errors.message.message}</span>}
+
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? 'Sending...' : 'Send Message'}
+      </button>
+    </form>
+  );
+}
+```
+
+## Service Functions Reference
+
+All generated services include these methods:
+
+### Collection Types
+
+<Tabs>
+  <Tab title="findMany">
+    Fetch multiple items with pagination:
+
+    ```typescript
+    const { data, pagination } = await articleService.findMany({
+      filters: {
+        publishedAt: { $notNull: true },
+      },
+      pagination: {
+        page: 1,
+        pageSize: 25,
+      },
+      sort: ['publishedAt:desc'],
+      populate: ['author'],
+    });
+    ```
+  </Tab>
+
+  <Tab title="findAll">
+    Fetch all items (handles pagination automatically):
+
+    ```typescript
+    const articles = await articleService.findAll({
+      filters: {
+        status: { $eq: 'published' },
+      },
+      sort: ['createdAt:desc'],
+    });
+    ```
+  </Tab>
+
+  <Tab title="findOne">
+    Fetch a single item by ID/documentId:
+
+    ```typescript
+    const article = await articleService.findOne('doc_123', {
+      populate: ['author', 'categories'],
+    });
+    ```
+  </Tab>
+
+  <Tab title="findBySlug">
+    Fetch by slug (if available):
+
+    ```typescript
+    const article = await articleService.findBySlug('my-article', {
+      populate: ['author'],
+    });
+    ```
+  </Tab>
+
+  <Tab title="create">
+    Create a new item:
+
+    ```typescript
+    const article = await articleService.create({
+      title: 'New Article',
+      content: 'Content here...',
+    });
+    ```
+  </Tab>
+
+  <Tab title="update">
+    Update an item:
+
+    ```typescript
+    const updated = await articleService.update('doc_123', {
+      title: 'Updated Title',
+    });
+    ```
+  </Tab>
+
+  <Tab title="delete">
+    Delete an item:
+
+    ```typescript
+    await articleService.delete('doc_123');
+    ```
+  </Tab>
+
+  <Tab title="count">
+    Count items:
+
+    ```typescript
+    const total = await articleService.count({
+      publishedAt: { $notNull: true },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Single Types
+
+- `find(options)` — Fetch single type data
+- `update(data)` — Update single type
+- `delete()` — Delete single type
+
+## Advanced Patterns
+
+### Data Fetching Strategies
+
+<Tabs>
+  <Tab title="SSG (Static)">
+    Generate static pages at build time:
+
+    ```typescript
+    export default async function ArticlePage({ params }) {
+      const article = await articleService.findBySlug(params.slug);
+      return <Article data={article} />;
+    }
+
+    export async function generateStaticParams() {
+      const articles = await articleService.findAll();
+      return articles.map(a => ({ slug: a.slug }));
+    }
+    ```
+  </Tab>
+
+  <Tab title="SSR (Dynamic)">
+    Fetch data on every request:
+
+    ```typescript
+    // This is the default in Next.js App Router
+    export default async function BlogPage() {
+      const { data } = await articleService.findMany({
+        pagination: { page: 1, pageSize: 10 },
+      });
+      return <ArticleList articles={data} />;
+    }
+    ```
+  </Tab>
+
+  <Tab title="ISR (Revalidate)">
+    Revalidate static pages periodically:
+
+    ```typescript
+    export const revalidate = 3600; // Revalidate every hour
+
+    export default async function ArticlePage({ params }) {
+      const article = await articleService.findBySlug(params.slug);
+      return <Article data={article} />;
+    }
+    ```
+  </Tab>
+
+  <Tab title="Client-Side">
+    Fetch data on the client:
+
+    ```typescript
+    'use client';
+    import useSWR from 'swr';
+
+    export function ArticleList() {
+      const { data } = useSWR('/api/articles', fetcher);
+      return <div>{/* render articles */}</div>;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Caching with Next.js
+
+Leverage Next.js caching for optimal performance:
+
+```typescript
+import { cache } from 'react';
+import { articleService } from '@/lib/strapi/collections/article/service';
+
+// Cache article fetching per request
+export const getArticle = cache(async (slug: string) => {
+  return await articleService.findBySlug(slug, {
+    populate: ['author', 'categories'],
+  });
+});
+
+// Use in multiple components without refetching
+export default async function ArticlePage({ params }) {
+  const article = await getArticle(params.slug);
+  return <Article data={article} />;
+}
+```
+
+### Parallel Data Fetching
+
+Fetch multiple resources in parallel:
+
+```typescript
+export default async function HomePage() {
+  // Fetch in parallel
+  const [homepage, articles, categories] = await Promise.all([
+    homepageService.find(),
+    articleService.findMany({ pagination: { pageSize: 5 } }),
+    categoryService.findAll(),
+  ]);
+
+  return (
+    <main>
+      <Hero data={homepage.data} />
+      <FeaturedArticles articles={articles.data} />
+      <Categories categories={categories} />
+    </main>
+  );
+}
+```
+
+## Server Actions (Coming Soon)
+
+<Note>
+  Server Actions generation for Next.js is in development and will be available in a future release.
+</Note>
+
+When available, you'll be able to use Server Actions like this:
+
+```typescript
+// Future syntax (not yet available)
+import { createArticle, updateArticle } from '@/lib/strapi/actions/article';
+
+export default function ArticleForm() {
+  return (
+    <form action={createArticle}>
+      <input name="title" required />
+      <textarea name="content" required />
+      <button type="submit">Create</button>
+    </form>
+  );
+}
+```
+
+## Best Practices
+
+<Tip>
+  Use Server Components by default and only mark components as `'use client'` when you need interactivity.
+</Tip>
+
+<Warning>
+  Never expose your `STRAPI_API_TOKEN` to the client. Always use it in Server Components or API routes.
+</Warning>
+
+<Tip>
+  Use the `findAll()` method sparingly in production, as it fetches all items. Prefer `findMany()` with pagination for better performance.
+</Tip>
+
+## Troubleshooting
+
+### Fetch Errors
+
+If you encounter fetch errors, check that your `NEXT_PUBLIC_STRAPI_URL` is correct and accessible.
+
+### Type Errors
+
+Run `npx strapi2front sync` to regenerate types after schema changes.
+
+### Environment Variables
+
+Remember that only variables prefixed with `NEXT_PUBLIC_` are available in client components.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Services" icon="gear" href="/guides/services">
+    Learn more about service functions
+  </Card>
+  
+  <Card title="Schemas" icon="shield-check" href="/guides/schemas">
+    Use Zod schemas for validation
+  </Card>
+  
+  <Card title="Relations" icon="link" href="/guides/relations">
+    Work with Strapi relations
+  </Card>
+  
+  <Card title="Types" icon="code" href="/guides/types">
+    Understand generated TypeScript types
+  </Card>
+</CardGroup>

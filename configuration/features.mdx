@@ -1,0 +1,783 @@
+---
+title: Features
+description: Control what code is generated - types, services, schemas, actions, and upload helpers
+---
+
+strapi2front generates different types of code based on your Strapi schema. Enable or disable features to match your project needs.
+
+## Feature Configuration
+
+```typescript title="strapi.config.ts"
+features: {
+  types: true,      // TypeScript interfaces
+  services: true,   // API service functions  
+  actions: true,    // Astro Actions (framework-specific)
+  schemas: true,    // Zod validation schemas
+  upload: false,    // File upload helpers
+}
+```
+
+<Note>
+All features work together. For example, services use types, and actions use both services and schemas.
+</Note>
+
+## Types
+
+Generates TypeScript interfaces for all content types, components, and system types.
+
+```typescript
+features: {
+  types: true,
+}
+```
+
+### Generated Files
+
+- `collections/{name}/types.ts` - Collection type interfaces
+- `singles/{name}/types.ts` - Single type interfaces  
+- `components/{name}.ts` - Component interfaces
+- `shared/utils.ts` - System types (media, pagination, base entities)
+
+### What's Included
+
+<Accordion title="Collection Types">
+  ```typescript title="collections/article/types.ts"
+  import type { StrapiBaseEntity, StrapiMedia } from '../../shared/utils';
+  import type { Author } from '../../collections/author/types';
+  import type { Tag } from '../tag/types';
+  
+  /**
+   * Article
+   * News and blog articles
+   */
+  export interface Article extends StrapiBaseEntity {
+    title: string;
+    slug: string;
+    content: string;
+    cover: StrapiMedia | null;
+    author: Author | null;
+    tags: Tag[];
+    publishedDate: string;
+  }
+  
+  export interface ArticleFilters {
+    id?: number | { $eq?: number; $ne?: number; $in?: number[] };
+    documentId?: string | { $eq?: string; $ne?: string };
+    title?: string | { $contains?: string; $startsWith?: string };
+    slug?: string | { $eq?: string };
+    publishedAt?: string | null | { $null?: boolean };
+    $and?: ArticleFilters[];
+    $or?: ArticleFilters[];
+    $not?: ArticleFilters;
+  }
+  ```
+</Accordion>
+
+<Accordion title="Single Types">
+  ```typescript title="singles/homepage/types.ts"
+  import type { StrapiBaseEntity } from '../../shared/utils';
+  import type { Hero } from '../../components/hero';
+  
+  /**
+   * Homepage
+   * Landing page content
+   */
+  export interface Homepage extends StrapiBaseEntity {
+    title: string;
+    hero: Hero | null;
+    metaDescription?: string;
+  }
+  ```
+</Accordion>
+
+<Accordion title="Components">
+  ```typescript title="components/hero.ts"
+  import type { StrapiMedia } from '../shared/utils';
+  
+  /**
+   * Hero component
+   * Category: layout
+   */
+  export interface Hero {
+    id: number;
+    heading: string;
+    subheading?: string;
+    backgroundImage: StrapiMedia | null;
+    ctaText?: string;
+    ctaUrl?: string;
+  }
+  ```
+</Accordion>
+
+<Accordion title="System Types">
+  ```typescript title="shared/utils.ts"
+  // Base entity with common fields
+  export interface StrapiBaseEntity {
+    id: number;
+    documentId: string;  // v5 only
+    createdAt: string;
+    updatedAt: string;
+    publishedAt: string | null;
+  }
+  
+  // Media/file type
+  export interface StrapiMedia {
+    id: number;
+    documentId: string;
+    name: string;
+    alternativeText: string | null;
+    width: number;
+    height: number;
+    url: string;
+    formats: {
+      thumbnail?: StrapiMediaFormat;
+      small?: StrapiMediaFormat;
+      medium?: StrapiMediaFormat;
+      large?: StrapiMediaFormat;
+    } | null;
+    // ... other fields
+  }
+  
+  // Pagination
+  export interface StrapiPagination {
+    page: number;
+    pageSize: number;
+    pageCount: number;
+    total: number;
+  }
+  
+  // Rich text (Strapi v5)
+  export type BlocksContent = unknown[];  // or from @strapi/blocks-react-renderer
+  ```
+</Accordion>
+
+### Version Differences
+
+<Tabs>
+  <Tab title="Strapi v5">
+    ```typescript
+    export interface StrapiBaseEntity {
+      id: number;
+      documentId: string;  // ✅ New in v5
+      createdAt: string;
+      updatedAt: string;
+      publishedAt: string | null;
+    }
+    ```
+    
+    Services use `documentId: string` for all operations.
+  </Tab>
+  
+  <Tab title="Strapi v4">
+    ```typescript
+    export interface StrapiBaseEntity {
+      id: number;  // ✅ Primary identifier
+      createdAt: string;
+      updatedAt: string;
+      publishedAt: string | null;
+    }
+    ```
+    
+    Services use `id: number` for all operations.
+  </Tab>
+</Tabs>
+
+## Services
+
+Generates fully-typed API service functions for fetching and mutating data.
+
+```typescript
+features: {
+  services: true,  // requires types: true
+}
+```
+
+### Generated Files
+
+- `collections/{name}/service.ts` - Collection CRUD operations
+- `singles/{name}/service.ts` - Single type operations
+- `shared/client.ts` - Strapi client wrapper
+
+### Collection Services
+
+Every collection gets a full CRUD service:
+
+```typescript title="collections/article/service.ts"
+import { collection, type ClientOptions } from '../../shared/client';
+import type { Article, ArticleFilters } from './types';
+
+export const articleService = {
+  /**
+   * Find multiple articles with filters, pagination, sorting
+   * Returns: { data: Article[], pagination: StrapiPagination }
+   */
+  async findMany(options?: FindManyOptions, clientOptions?: ClientOptions) {
+    // ...
+  },
+  
+  /**
+   * Find ALL articles (auto-paginated)
+   * Returns: Article[]
+   */
+  async findAll(options?: Omit<FindManyOptions, 'pagination'>, clientOptions?: ClientOptions) {
+    // Automatically handles pagination to fetch all items
+  },
+  
+  /**
+   * Find single article by documentId (v5) or id (v4)
+   */
+  async findOne(documentId: string, options?: FindOneOptions, clientOptions?: ClientOptions) {
+    // ...
+  },
+  
+  /**
+   * Find by slug (if content type has slug field)
+   */
+  async findBySlug(slug: string, options?: FindOneOptions, clientOptions?: ClientOptions) {
+    // ...
+  },
+  
+  /**
+   * Create new article
+   */
+  async create(data: Partial<Omit<Article, 'id' | 'documentId' | '...'>>, clientOptions?: ClientOptions) {
+    // ...
+  },
+  
+  /**
+   * Update existing article
+   */
+  async update(documentId: string, data: Partial<Article>, clientOptions?: ClientOptions) {
+    // ...
+  },
+  
+  /**
+   * Delete article
+   */
+  async delete(documentId: string, clientOptions?: ClientOptions) {
+    // ...
+  },
+  
+  /**
+   * Count articles matching filters
+   */
+  async count(filters?: ArticleFilters, clientOptions?: ClientOptions) {
+    // ...
+  },
+};
+```
+
+### Single Type Services
+
+```typescript title="singles/homepage/service.ts"
+export const homepageService = {
+  async find(options?: FindOptions, clientOptions?: ClientOptions) {
+    // ...
+  },
+  
+  async update(data: Partial<Homepage>, clientOptions?: ClientOptions) {
+    // ...
+  },
+  
+  async delete(clientOptions?: ClientOptions) {
+    // ...
+  },
+};
+```
+
+### Usage Examples
+
+<CodeGroup>
+```typescript title="List Articles"
+import { articleService } from '@/strapi/collections/article/service';
+
+// Paginated list
+const { data, pagination } = await articleService.findMany({
+  filters: { 
+    publishedAt: { $null: false },
+    title: { $contains: 'React' }
+  },
+  pagination: { page: 1, pageSize: 10 },
+  sort: ['publishedDate:desc'],
+  populate: ['author', 'cover'],
+});
+
+console.log(`Found ${pagination.total} articles`);
+```
+
+```typescript title="Fetch All"
+// Get ALL articles (auto-paginated)
+const allArticles = await articleService.findAll({
+  filters: { publishedAt: { $null: false } },
+  populate: '*',
+});
+
+// Perfect for generating static pages
+export async function getStaticPaths() {
+  const articles = await articleService.findAll();
+  return articles.map(article => ({
+    params: { slug: article.slug },
+  }));
+}
+```
+
+```typescript title="Get by ID"
+const article = await articleService.findOne('abc123def', {
+  populate: ['author', 'tags', 'cover'],
+});
+```
+
+```typescript title="Create & Update"
+// Create
+const newArticle = await articleService.create({
+  title: 'My Article',
+  slug: 'my-article',
+  content: 'Article content here',
+  author: 'author-doc-id',
+});
+
+// Update
+const updated = await articleService.update('abc123def', {
+  title: 'Updated Title',
+});
+```
+</CodeGroup>
+
+### Client Options (Beta)
+
+Pass custom authentication or base URL per request:
+
+```typescript
+import { articleService } from '@/strapi/collections/article/service';
+
+// Use custom auth token (e.g., user JWT)
+const userArticles = await articleService.findMany(
+  { filters: { author: userId } },
+  { authToken: session.jwt }
+);
+
+// Use different Strapi instance (multi-tenant)
+const tenantData = await articleService.findMany(
+  {},
+  { 
+    baseURL: 'https://tenant.example.com',
+    authToken: tenantToken 
+  }
+);
+```
+
+## Actions
+
+Generates Astro Actions for type-safe server-side API operations.
+
+```typescript
+features: {
+  actions: true,  // requires types: true, services: true
+}
+```
+
+<Warning>
+Actions are **only generated for TypeScript** projects (`outputFormat: "typescript"`). They are automatically skipped when using JSDoc output.
+</Warning>
+
+### Generated Files
+
+- `collections/{name}/actions.ts` - Astro action definitions
+
+### Usage with Astro
+
+<CodeGroup>
+```typescript title="src/actions/index.ts"
+import { article } from '@/strapi/collections/article/actions';
+
+export const server = {
+  article,
+};
+```
+
+```astro title="src/pages/articles/[slug].astro"
+---
+import { actions } from 'astro:actions';
+
+const { slug } = Astro.params;
+const article = await actions.article.findBySlug({ slug });
+---
+
+<h1>{article.title}</h1>
+<p>{article.content}</p>
+```
+</CodeGroup>
+
+<Info>
+For more framework integrations (Next.js, Nuxt, etc.), see the [Astro](/integrations/astro), [Next.js](/integrations/nextjs), and [Nuxt](/integrations/nuxt) guides.
+</Info>
+
+## Schemas
+
+Generates Zod validation schemas for form handling and data validation.
+
+```typescript
+features: {
+  schemas: true,  // auto-enabled for TypeScript, disabled for JSDoc
+}
+```
+
+**Default behavior:**
+- `true` when `outputFormat: "typescript"`
+- `false` when `outputFormat: "jsdoc"`
+
+### Generated Files
+
+- `collections/{name}/schemas.ts` - Create/update schemas
+- `singles/{name}/schemas.ts` - Update schemas
+- `components/{name}.ts` - Component schemas (appended to types file)
+
+### Schema Types
+
+Each content type gets two schemas:
+
+```typescript title="collections/article/schemas.ts"
+import { z } from 'zod';
+import { authorSchema } from '../../components/author';
+
+/**
+ * Schema for creating new articles
+ * All required fields must be provided
+ */
+export const articleCreateSchema = z.object({
+  title: z.string(),
+  slug: z.string(),
+  content: z.string(),
+  cover: z.number().optional(),  // media as ID
+  author: z.string().optional(), // relation as documentId
+  tags: z.array(z.string()).optional(),
+  publishedDate: z.string().optional(),
+});
+
+/**
+ * Schema for updating articles
+ * All fields are optional
+ */
+export const articleUpdateSchema = z.object({
+  title: z.string().optional(),
+  slug: z.string().optional(),
+  content: z.string().optional(),
+  cover: z.number().optional(),
+  author: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  publishedDate: z.string().optional(),
+});
+
+export type ArticleCreateInput = z.infer<typeof articleCreateSchema>;
+export type ArticleUpdateInput = z.infer<typeof articleUpdateSchema>;
+```
+
+### Advanced Relations
+
+Enable the full Strapi v5 relation API:
+
+```typescript title="strapi.config.ts"
+schemaOptions: {
+  advancedRelations: true,
+}
+```
+
+<Tabs>
+  <Tab title="Simple Relations (default)">
+    ```typescript
+    // Schema uses simple array format
+    const schema = z.object({
+      tags: z.array(z.string()).optional(),
+    });
+    
+    // Usage
+    const data = {
+      tags: ["tag1-doc-id", "tag2-doc-id"],  // replaces all
+    };
+    ```
+  </Tab>
+  
+  <Tab title="Advanced Relations">
+    ```typescript
+    // Schema supports full API
+    const schema = z.object({
+      tags: z.union([
+        z.array(z.string()),  // shorthand
+        z.object({            // longhand
+          connect: z.array(z.object({
+            documentId: z.string(),
+            position: z.object({
+              before: z.string().optional(),
+              after: z.string().optional(),
+              start: z.boolean().optional(),
+              end: z.boolean().optional(),
+            }).optional(),
+          })).optional(),
+          disconnect: z.array(z.string()).optional(),
+          set: z.array(z.object({ documentId: z.string() })).optional(),
+        }),
+      ]).optional(),
+    });
+    
+    // Usage - add tags while keeping existing
+    const data = {
+      tags: {
+        connect: [{ documentId: "new-tag-id" }],
+      },
+    };
+    
+    // Usage - remove specific tag
+    const data = {
+      tags: {
+        disconnect: ["tag-to-remove-id"],
+      },
+    };
+    
+    // Usage - replace all with ordering
+    const data = {
+      tags: {
+        set: [
+          { documentId: "tag1", position: { start: true } },
+          { documentId: "tag2", position: { after: "tag1" } },
+        ],
+      },
+    };
+    ```
+  </Tab>
+</Tabs>
+
+### Form Integration
+
+<CodeGroup>
+```typescript title="React Hook Form"
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { articleCreateSchema } from '@/strapi/collections/article/schemas';
+import type { ArticleCreateInput } from '@/strapi/collections/article/schemas';
+
+function CreateArticleForm() {
+  const form = useForm<ArticleCreateInput>({
+    resolver: zodResolver(articleCreateSchema),
+  });
+  
+  const onSubmit = async (data: ArticleCreateInput) => {
+    await articleService.create(data);
+  };
+  
+  return <form onSubmit={form.handleSubmit(onSubmit)}>...</form>;
+}
+```
+
+```typescript title="TanStack Form"
+import { useForm } from '@tanstack/react-form';
+import { zodValidator } from '@tanstack/zod-form-adapter';
+import { articleCreateSchema } from '@/strapi/collections/article/schemas';
+
+function CreateArticleForm() {
+  const form = useForm({
+    defaultValues: { title: '', content: '' },
+    validators: {
+      onChange: zodValidator(articleCreateSchema),
+    },
+  });
+  
+  // ...
+}
+```
+</CodeGroup>
+
+## Upload
+
+Generates file upload helpers for uploading media to Strapi.
+
+```typescript
+features: {
+  upload: true,
+}
+```
+
+### Generated Files
+
+- `shared/upload-client.ts` - Browser-side upload (public token)
+- `shared/upload-action.ts` - Server-side Astro Action (requires `actions: true`)
+
+### Two Upload Strategies
+
+<Tabs>
+  <Tab title="Astro Action (Recommended)">
+    Server-side upload via Astro Actions. Token stays private on server.
+    
+    ```typescript title="src/components/UploadForm.tsx"
+    import { actions } from 'astro:actions';
+    
+    async function handleUpload(file: File) {
+      const result = await actions.upload({
+        file,
+        alternativeText: 'My image',
+        caption: 'A nice photo',
+      });
+      
+      console.log('Uploaded:', result.data);
+      // Returns full StrapiMedia object
+    }
+    ```
+    
+    **Environment:**
+    ```bash
+    STRAPI_TOKEN=your-private-token  # server-side only
+    ```
+    
+    **Requires:** `features.actions: true` and TypeScript
+  </Tab>
+  
+  <Tab title="Public Upload Client">
+    Direct browser-to-Strapi uploads using a restricted upload-only token.
+    
+    ```typescript title="src/components/UploadForm.tsx"
+    import { uploadFile } from '@/strapi/shared/upload-client';
+    
+    async function handleUpload(file: File) {
+      const media = await uploadFile(file, {
+        alternativeText: 'My image',
+      });
+      
+      console.log('Uploaded:', media);
+    }
+    ```
+    
+    **Environment:**
+    ```bash
+    PUBLIC_STRAPI_URL=http://localhost:1337
+    PUBLIC_STRAPI_UPLOAD_TOKEN=upload-only-token  # exposed to browser
+    ```
+    
+    **Works with:** Any framework (React, Vue, Svelte, etc.)
+  </Tab>
+</Tabs>
+
+### Security Setup
+
+<Warning>
+**For public upload client:**
+
+1. Create a dedicated API token in Strapi: **Settings > API Tokens**
+2. Set permissions to **Upload > upload** ONLY
+3. Never grant delete or update permissions
+4. Token is visible in browser - keep permissions minimal
+</Warning>
+
+### Usage with Relations
+
+After uploading, use the returned `id` to link to content:
+
+```typescript
+import { uploadFile } from '@/strapi/shared/upload-client';
+import { articleService } from '@/strapi/collections/article/service';
+
+// 1. Upload image
+const coverImage = await uploadFile(file);
+
+// 2. Create article with uploaded image
+const article = await articleService.create({
+  title: 'My Article',
+  content: 'Content here',
+  cover: coverImage.id,  // ✅ Link uploaded media
+});
+```
+
+## CLI Overrides
+
+Generate only specific features using CLI flags:
+
+```bash
+# Only types
+npx strapi2front sync --types-only
+
+# Only services  
+npx strapi2front sync --services-only
+
+# Only schemas
+npx strapi2front sync --schemas-only
+
+# Only actions
+npx strapi2front sync --actions-only
+
+# Only upload helpers
+npx strapi2front sync --upload-only
+```
+
+<Info>
+CLI flags override config settings. Use for one-off regeneration without editing config.
+</Info>
+
+## Recommended Configurations
+
+<Tabs>
+  <Tab title="Astro Project">
+    ```typescript title="strapi.config.ts"
+    export default defineConfig({
+      features: {
+        types: true,
+        services: true,
+        schemas: true,
+        actions: true,   // ✅ Enable for Astro
+        upload: true,    // ✅ Use upload actions
+      },
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Next.js / React">
+    ```typescript title="strapi.config.ts"
+    export default defineConfig({
+      features: {
+        types: true,
+        services: true,
+        schemas: true,   // ✅ For React Hook Form
+        actions: false,  // ❌ Astro-specific
+        upload: true,    // ✅ Use public upload client
+      },
+    });
+    ```
+  </Tab>
+  
+  <Tab title="JavaScript Project">
+    ```javascript title="strapi.config.js"
+    module.exports = {
+      outputFormat: 'jsdoc',
+      features: {
+        types: true,     // ✅ Generates JSDoc types
+        services: true,  // ✅ Generates .js services
+        schemas: false,  // ❌ Zod works best with TS
+        actions: false,  // ❌ Requires TypeScript
+        upload: true,    // ✅ Works with JSDoc
+      },
+    };
+    ```
+  </Tab>
+  
+  <Tab title="Minimal (Types Only)">
+    ```typescript title="strapi.config.ts"
+    export default defineConfig({
+      features: {
+        types: true,     // ✅ Just types
+        services: false, // ❌ Write your own API layer
+        schemas: false,
+        actions: false,
+        upload: false,
+      },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Output Structure" icon="folder-tree" href="/configuration/output-structure">
+    See where files are generated
+  </Card>
+  <Card title="Using Services" icon="code" href="/guides/using-services">
+    Learn how to use generated services
+  </Card>
+</CardGroup>

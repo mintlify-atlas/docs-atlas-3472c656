@@ -1,0 +1,567 @@
+---
+title: "Astro Integration"
+description: "Use Strapi2Front with Astro to generate type-safe Actions for your Strapi content"
+---
+
+<Info>
+  **Prerequisites**:
+  - Astro 4.0 or higher (Actions are only available in v4+)
+  - TypeScript enabled in your Astro project
+  - Strapi v4 or v5 backend
+</Info>
+
+Strapi2Front generates type-safe Astro Actions that provide a seamless way to fetch and mutate Strapi content with built-in validation, error handling, and TypeScript support.
+
+## Features
+
+- **Type-safe Actions** — Full TypeScript support with auto-generated types
+- **Zod Validation** — Automatic input validation using Zod schemas
+- **Error Handling** — Built-in error handling with ActionError
+- **CRUD Operations** — Complete create, read, update, delete functionality
+- **Slug Support** — Automatic slug-based queries when available
+- **Pagination** — Built-in pagination support
+- **Populate Relations** — Easy relation population
+
+## Setup
+
+<Steps>
+<Step title="Install Strapi2Front">
+
+Install the package in your Astro project:
+
+```bash
+npm install strapi2front
+```
+
+</Step>
+
+<Step title="Initialize Configuration">
+
+Run the init command to create a configuration file:
+
+```bash
+npx strapi2front init
+```
+
+This creates a `strapi2front.config.ts` file in your project root.
+
+</Step>
+
+<Step title="Configure for Astro">
+
+Update your `strapi2front.config.ts` to generate Astro Actions:
+
+```typescript strapi2front.config.ts
+import { defineConfig } from 'strapi2front';
+
+export default defineConfig({
+  strapiUrl: process.env.STRAPI_URL || 'http://localhost:1337',
+  strapiVersion: 'v5', // or 'v4'
+  output: {
+    path: './src/strapi',
+    structure: 'by-feature', // or 'by-type'
+  },
+  features: {
+    types: true,
+    services: true,
+    schemas: true,
+    actions: {
+      enabled: true,
+      framework: 'astro',
+      useTypedSchemas: true, // Use Zod schemas for validation
+    },
+  },
+});
+```
+
+</Step>
+
+<Step title="Add Environment Variables">
+
+Create a `.env` file with your Strapi credentials:
+
+```bash .env
+STRAPI_URL=https://your-strapi-instance.com
+STRAPI_API_TOKEN=your-api-token-here
+```
+
+</Step>
+
+<Step title="Generate Actions">
+
+Run the sync command to generate types, services, and actions:
+
+```bash
+npx strapi2front sync
+```
+
+This generates the following structure:
+
+```
+src/strapi/
+├── collections/
+│   └── article/
+│       ├── types.ts      # TypeScript types
+│       ├── schemas.ts    # Zod schemas
+│       ├── service.ts    # Service functions
+│       └── actions.ts    # Astro Actions
+├── singles/
+│   └── homepage/
+│       ├── types.ts
+│       ├── schemas.ts
+│       ├── service.ts
+│       └── actions.ts
+└── shared/
+    ├── client.ts         # Strapi client
+    └── utils.ts          # Utility types
+```
+
+</Step>
+
+<Step title="Register Actions">
+
+Create an `src/actions/index.ts` file to export your actions:
+
+```typescript src/actions/index.ts
+import { article } from '../strapi/collections/article/actions';
+import { homepage } from '../strapi/singles/homepage/actions';
+
+export const server = {
+  article,
+  homepage,
+};
+```
+
+</Step>
+</Steps>
+
+## Usage
+
+### Fetching Data
+
+<Tabs>
+  <Tab title="Collection Type">
+    Use actions to fetch collection data in your Astro components:
+
+    ```astro src/pages/blog/index.astro
+    ---
+    import { actions } from 'astro:actions';
+
+    // Get all articles with pagination
+    const { data: articles } = await actions.article.getAll({
+      pagination: {
+        page: 1,
+        pageSize: 10,
+      },
+      sort: ['publishedAt:desc'],
+    });
+    ---
+
+    <div class="blog-list">
+      {articles.data.map(article => (
+        <article>
+          <h2>{article.title}</h2>
+          <p>{article.excerpt}</p>
+          <a href={`/blog/${article.slug}`}>Read more</a>
+        </article>
+      ))}
+    </div>
+    ```
+  </Tab>
+
+  <Tab title="Single Type">
+    Fetch single type data:
+
+    ```astro src/pages/index.astro
+    ---
+    import { actions } from 'astro:actions';
+
+    // Get homepage data
+    const { data: homepage } = await actions.homepage.get({
+      populate: ['hero', 'sections'],
+    });
+    ---
+
+    <section class="hero">
+      <h1>{homepage.hero.title}</h1>
+      <p>{homepage.hero.description}</p>
+    </section>
+    ```
+  </Tab>
+
+  <Tab title="By Slug">
+    Fetch by slug (when available):
+
+    ```astro src/pages/blog/[slug].astro
+    ---
+    import { actions } from 'astro:actions';
+
+    const { slug } = Astro.params;
+
+    // Get article by slug
+    const { data: article } = await actions.article.getBySlug({
+      slug: slug!,
+      populate: ['author', 'categories'],
+    });
+
+    if (!article) {
+      return Astro.redirect('/404');
+    }
+    ---
+
+    <article>
+      <h1>{article.title}</h1>
+      <div>{article.content}</div>
+    </article>
+    ```
+  </Tab>
+</Tabs>
+
+### Form Handling
+
+Use actions in forms with automatic validation:
+
+<CodeGroup>
+```astro src/pages/contact.astro
+---
+import { actions } from 'astro:actions';
+
+const result = Astro.getActionResult(actions.contact.create);
+---
+
+<form method="POST" action={actions.contact.create}>
+  <input type="text" name="name" placeholder="Your name" required />
+  <input type="email" name="email" placeholder="Email" required />
+  <textarea name="message" placeholder="Message" required></textarea>
+  
+  {result?.error && (
+    <p class="error">{result.error.message}</p>
+  )}
+  
+  {result?.data && (
+    <p class="success">Thank you! We'll be in touch soon.</p>
+  )}
+  
+  <button type="submit">Send</button>
+</form>
+```
+
+```typescript src/strapi/collections/contact/actions.ts
+// Generated by strapi2front
+import { defineAction, ActionError } from 'astro:actions';
+import { z } from 'astro:schema';
+import { contactService } from './service';
+
+export const contact = {
+  create: defineAction({
+    input: z.object({
+      data: z.object({
+        name: z.string().min(1),
+        email: z.string().email(),
+        message: z.string().min(10),
+      }),
+    }),
+    handler: async ({ data }) => {
+      try {
+        const result = await contactService.create(data);
+        return result;
+      } catch (error) {
+        throw new ActionError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to create contact',
+        });
+      }
+    },
+  }),
+};
+```
+</CodeGroup>
+
+### Client-Side Actions
+
+Call actions from client-side scripts:
+
+```typescript src/components/Newsletter.tsx
+import { actions } from 'astro:actions';
+import { useState } from 'react';
+
+export function Newsletter() {
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus('loading');
+
+    try {
+      const { data, error } = await actions.newsletter.create({
+        data: { email },
+      });
+
+      if (error) {
+        setStatus('error');
+        return;
+      }
+
+      setStatus('success');
+      setEmail('');
+    } catch (error) {
+      setStatus('error');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Enter your email"
+        required
+      />
+      <button type="submit" disabled={status === 'loading'}>
+        {status === 'loading' ? 'Subscribing...' : 'Subscribe'}
+      </button>
+      {status === 'success' && <p>Successfully subscribed!</p>}
+      {status === 'error' && <p>Something went wrong. Please try again.</p>}
+    </form>
+  );
+}
+```
+
+## Generated Actions Reference
+
+### Collection Type Actions
+
+For each collection type (e.g., `Article`), the following actions are generated:
+
+<Tabs>
+  <Tab title="getAll">
+    Fetch all items with pagination:
+
+    ```typescript
+    await actions.article.getAll({
+      pagination: {
+        page: 1,
+        pageSize: 25,
+      },
+      sort: ['publishedAt:desc'],
+    });
+    ```
+
+    **Options:**
+    - `pagination` — Page-based or offset-based pagination
+    - `sort` — Sort by field(s)
+    - Returns: `{ data: Article[], pagination: StrapiPagination }`
+  </Tab>
+
+  <Tab title="getOne">
+    Fetch a single item by ID or documentId:
+
+    ```typescript
+    // Strapi v5 (documentId)
+    await actions.article.getOne({
+      documentId: 'abc123',
+      populate: ['author', 'categories'],
+    });
+
+    // Strapi v4 (numeric id)
+    await actions.article.getOne({
+      id: 42,
+      populate: ['author'],
+    });
+    ```
+
+    **Returns:** Single `Article` or throws `NOT_FOUND` error
+  </Tab>
+
+  <Tab title="getBySlug">
+    Fetch by slug (only generated if collection has slug field):
+
+    ```typescript
+    await actions.article.getBySlug({
+      slug: 'my-first-post',
+      populate: ['author'],
+    });
+    ```
+
+    **Returns:** Single `Article` or throws `NOT_FOUND` error
+  </Tab>
+
+  <Tab title="create">
+    Create a new item:
+
+    ```typescript
+    await actions.article.create({
+      data: {
+        title: 'New Article',
+        content: 'Article content...',
+        publishedAt: new Date().toISOString(),
+      },
+    });
+    ```
+
+    **Returns:** Created `Article`
+  </Tab>
+
+  <Tab title="update">
+    Update an existing item:
+
+    ```typescript
+    await actions.article.update({
+      documentId: 'abc123', // or id for v4
+      data: {
+        title: 'Updated Title',
+      },
+    });
+    ```
+
+    **Returns:** Updated `Article`
+  </Tab>
+
+  <Tab title="delete">
+    Delete an item:
+
+    ```typescript
+    await actions.article.delete({
+      documentId: 'abc123', // or id for v4
+    });
+    ```
+
+    **Returns:** `{ success: true }`
+  </Tab>
+
+  <Tab title="count">
+    Count items with optional filters:
+
+    ```typescript
+    await actions.article.count({
+      filters: {
+        publishedAt: { $notNull: true },
+      },
+    });
+    ```
+
+    **Returns:** `{ count: number }`
+  </Tab>
+</Tabs>
+
+### Single Type Actions
+
+For single types (e.g., `Homepage`), these actions are generated:
+
+- `get()` — Fetch the single type data
+- `update()` — Update the single type
+
+## Advanced Features
+
+### Typed Zod Schemas
+
+When `useTypedSchemas: true` is enabled, Strapi2Front generates fully typed Zod schemas based on your Strapi content types:
+
+```typescript
+// Auto-generated schema with proper validation
+const createSchema = z.object({
+  title: z.string().min(1),
+  excerpt: z.string().optional(),
+  content: z.string(),
+  publishedAt: z.string().datetime().optional(),
+  author: z.string(), // Relation
+  categories: z.array(z.string()).optional(), // Relation array
+});
+```
+
+### Error Handling
+
+All actions include comprehensive error handling:
+
+```typescript
+import { actions, isInputError } from 'astro:actions';
+
+try {
+  const { data, error } = await actions.article.getOne({
+    documentId: 'invalid-id',
+  });
+
+  if (error) {
+    if (error.code === 'NOT_FOUND') {
+      console.log('Article not found');
+    } else if (isInputError(error)) {
+      console.log('Validation error:', error.fields);
+    }
+  }
+} catch (error) {
+  console.error('Unexpected error:', error);
+}
+```
+
+### Populate Relations
+
+Easily populate related content:
+
+```typescript
+// Populate specific relations
+await actions.article.getOne({
+  documentId: 'abc123',
+  populate: ['author', 'categories'],
+});
+
+// Deep populate
+await actions.article.getOne({
+  documentId: 'abc123',
+  populate: {
+    author: {
+      populate: ['avatar'],
+    },
+    categories: true,
+  },
+});
+```
+
+## Best Practices
+
+<Warning>
+  Always validate user input, even though Zod schemas provide automatic validation. Consider adding additional business logic validation when needed.
+</Warning>
+
+<Tip>
+  Use the `findAll()` method from services when you need all items without pagination. This is more efficient than manually paginating through all pages.
+</Tip>
+
+<Note>
+  Actions are only available in Astro 4.0+. If you're using an earlier version, use the generated services directly instead.
+</Note>
+
+## Troubleshooting
+
+### Actions not found
+
+Make sure you've registered your actions in `src/actions/index.ts` and exported them from the `server` object.
+
+### TypeScript errors
+
+Run `npx strapi2front sync` to regenerate types after making changes to your Strapi schema.
+
+### Validation errors
+
+Check that your input data matches the generated Zod schemas. You can import schemas from `collections/[name]/schemas.ts` to validate data before submitting.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Services" icon="gear" href="/guides/services">
+    Learn about the generated service functions
+  </Card>
+  
+  <Card title="Schemas" icon="shield-check" href="/guides/schemas">
+    Understand Zod schema generation
+  </Card>
+  
+  <Card title="Relations" icon="link" href="/guides/relations">
+    Work with Strapi relations
+  </Card>
+  
+  <Card title="Media" icon="image" href="/guides/media">
+    Handle media uploads
+  </Card>
+</CardGroup>

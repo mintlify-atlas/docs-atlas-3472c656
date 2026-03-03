@@ -1,0 +1,597 @@
+---
+title: Installation
+description: Complete installation guide for Strapi2Front. Set up type-safe code generation from your Strapi CMS.
+---
+
+# Installation
+
+This guide covers everything you need to install and configure Strapi2Front in your project.
+
+## System Requirements
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    Version 18.0.0 or higher required
+  </Card>
+  <Card title="Strapi" icon="database">
+    Strapi v4 or v5 instance (local or remote)
+  </Card>
+  <Card title="Package Manager" icon="box">
+    npm, pnpm, yarn, or bun
+  </Card>
+  <Card title="TypeScript (Optional)" icon="code">
+    Works with both TypeScript and JavaScript projects
+  </Card>
+</CardGroup>
+
+## Installation Methods
+
+### Interactive Setup (Recommended)
+
+The easiest way to get started is using the interactive `init` command:
+
+<CodeGroup>
+```bash npm
+npx strapi2front@latest init
+```
+
+```bash pnpm
+pnpm dlx strapi2front@latest init
+```
+
+```bash yarn
+yarn dlx strapi2front@latest init
+```
+
+```bash bun
+bunx strapi2front@latest init
+```
+</CodeGroup>
+
+This will:
+
+1. **Detect your project configuration** (framework, TypeScript, package manager)
+2. **Prompt for Strapi connection details** (URL, token, version)
+3. **Create configuration file** (`strapi.config.ts` or `strapi.config.js`)
+4. **Set up environment variables** (`.env` and `.env.example`)
+5. **Install dependencies** (optional)
+
+<Info>
+The `init` command is safe to re-run. It won't overwrite existing environment variables.
+</Info>
+
+### Manual Installation
+
+If you prefer manual setup:
+
+<Steps>
+  <Step title="Install the package">
+    Add Strapi2Front as a dev dependency:
+    
+    <CodeGroup>
+    ```bash npm
+    npm install -D strapi2front
+    npm install @strapi/client
+    ```
+    
+    ```bash pnpm
+    pnpm add -D strapi2front
+    pnpm add @strapi/client
+    ```
+    
+    ```bash yarn
+    yarn add -D strapi2front
+    yarn add @strapi/client
+    ```
+    
+    ```bash bun
+    bun add -D strapi2front
+    bun add @strapi/client
+    ```
+    </CodeGroup>
+    
+    <Note>
+    - `strapi2front` is a dev dependency (used for code generation)
+    - `@strapi/client` is a runtime dependency (used by generated code)
+    </Note>
+  </Step>
+  
+  <Step title="Create configuration file">
+    Create `strapi.config.ts` (or `.js` for JavaScript projects):
+    
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript strapi.config.ts
+        import { defineConfig } from "strapi2front";
+        
+        export default defineConfig({
+          // Strapi connection
+          url: process.env.STRAPI_URL || "http://localhost:1337",
+          token: process.env.STRAPI_SYNC_TOKEN || process.env.STRAPI_TOKEN,
+          
+          // API prefix (default: "/api")
+          apiPrefix: "/api",
+          
+          // Output format: "typescript" (.ts) or "jsdoc" (.js with JSDoc)
+          outputFormat: "typescript",
+          
+          // Output configuration
+          output: {
+            path: "src/strapi",
+          },
+          
+          // Features to generate
+          features: {
+            types: true,       // TypeScript interfaces
+            services: true,    // Service functions
+            actions: true,     // Framework actions (Astro, Next.js, etc.)
+            schemas: true,     // Zod validation schemas
+            upload: false,     // File upload helpers
+          },
+          
+          // Strapi version
+          strapiVersion: "v5",
+        });
+        ```
+      </Tab>
+      
+      <Tab title="JavaScript (ESM)">
+        ```javascript strapi.config.js
+        // @ts-check
+        import { defineConfig } from "strapi2front";
+        
+        export default defineConfig({
+          // Strapi connection
+          url: process.env.STRAPI_URL || "http://localhost:1337",
+          token: process.env.STRAPI_SYNC_TOKEN || process.env.STRAPI_TOKEN,
+          
+          // API prefix (default: "/api")
+          apiPrefix: "/api",
+          
+          // Output format: "typescript" (.ts) or "jsdoc" (.js with JSDoc)
+          outputFormat: "jsdoc",
+          
+          // Module type: "esm" or "commonjs" (auto-detected if not specified)
+          moduleType: "esm",
+          
+          // Output configuration
+          output: {
+            path: "src/strapi",
+          },
+          
+          // Features to generate
+          features: {
+            types: true,       // JSDoc type definitions
+            services: true,    // Service functions with JSDoc
+            actions: false,    // Actions require TypeScript
+            schemas: true,     // Zod validation schemas
+            upload: false,     // File upload helpers
+          },
+          
+          // Strapi version
+          strapiVersion: "v5",
+        });
+        ```
+      </Tab>
+      
+      <Tab title="JavaScript (CommonJS)">
+        ```javascript strapi.config.js
+        // @ts-check
+        const { defineConfig } = require("strapi2front");
+        
+        module.exports = defineConfig({
+          // Strapi connection
+          url: process.env.STRAPI_URL || "http://localhost:1337",
+          token: process.env.STRAPI_SYNC_TOKEN || process.env.STRAPI_TOKEN,
+          
+          // API prefix (default: "/api")
+          apiPrefix: "/api",
+          
+          // Output format: "typescript" (.ts) or "jsdoc" (.js with JSDoc)
+          outputFormat: "jsdoc",
+          
+          // Output configuration
+          output: {
+            path: "src/strapi",
+          },
+          
+          // Features to generate
+          features: {
+            types: true,       // JSDoc type definitions
+            services: true,    // Service functions with JSDoc
+            actions: false,    // Actions require TypeScript
+            schemas: true,     // Zod validation schemas
+            upload: false,     // File upload helpers
+          },
+          
+          // Strapi version
+          strapiVersion: "v5",
+        });
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  
+  <Step title="Set up environment variables">
+    Create or update your `.env` file:
+    
+    ```bash .env
+    # Strapi URL
+    STRAPI_URL=http://localhost:1337
+    
+    # Sync token: Used by strapi2front to sync schema (development only)
+    # Permissions: content-type-builder (getContentTypes, getComponents), i18n (listLocales)
+    # IMPORTANT: Do NOT deploy this token to production
+    STRAPI_SYNC_TOKEN=
+    
+    # Frontend token: Used by your app to fetch content (production)
+    # Configure with only the permissions your app needs
+    STRAPI_TOKEN=
+    ```
+    
+    Create `.env.example` for your repository:
+    
+    ```bash .env.example
+    # Strapi URL
+    STRAPI_URL=http://localhost:1337
+    
+    # Sync token: Used by strapi2front to sync schema (development only)
+    # Permissions: content-type-builder (getContentTypes, getComponents), i18n (listLocales)
+    # IMPORTANT: Do NOT deploy this token to production
+    STRAPI_SYNC_TOKEN=
+    
+    # Frontend token: Used by your app to fetch content (production)
+    # Configure with only the permissions your app needs
+    STRAPI_TOKEN=
+    ```
+    
+    <Warning>
+    Add `.env` to your `.gitignore` to avoid committing sensitive tokens:
+    
+    ```bash .gitignore
+    .env
+    .env.local
+    ```
+    </Warning>
+  </Step>
+</Steps>
+
+## Strapi API Token Setup
+
+Strapi2Front requires an API token with specific permissions to read your content type schema.
+
+<Steps>
+  <Step title="Create API Token in Strapi">
+    Navigate to your Strapi admin panel:
+    
+    **Settings > API Tokens > Create new API Token**
+  </Step>
+  
+  <Step title="Configure Token Settings">
+    <Tabs>
+      <Tab title="Strapi v5">
+        - **Token name**: `strapi2front-sync`
+        - **Token type**: `Custom`
+        - **Token duration**: `Unlimited` (for development)
+        
+        **Permissions**:
+        - ✅ **Content-type-builder**
+          - Components: `getComponents`, `getComponent`
+          - Content-types: `getContentTypes`, `getContentType`
+        - ✅ **I18n** (if using localization)
+          - Locales: `listLocales`
+      </Tab>
+      
+      <Tab title="Strapi v4">
+        - **Name**: `strapi2front-sync`
+        - **Token type**: `Custom`
+        - **Duration**: `Unlimited` (for development)
+        
+        **Permissions**:
+        - ✅ **Content-type-builder**
+          - `getContentTypes`
+          - `getContentType`
+          - `getComponents`
+          - `getComponent`
+        - ✅ **I18n** (if using localization)
+          - `listLocales`
+      </Tab>
+    </Tabs>
+  </Step>
+  
+  <Step title="Save and Copy Token">
+    Click **Save** and copy the generated token immediately.
+    
+    <Warning>
+    Strapi only shows the token once. If you lose it, you'll need to create a new one.
+    </Warning>
+    
+    Add it to your `.env` file:
+    
+    ```bash
+    STRAPI_SYNC_TOKEN=your-generated-token-here
+    ```
+  </Step>
+</Steps>
+
+<Info>
+**Why two tokens?**
+
+- `STRAPI_SYNC_TOKEN`: Used by the CLI to read your schema (development only, should NOT be deployed)
+- `STRAPI_TOKEN`: Used by your app to fetch content (production, with limited read-only permissions)
+
+The CLI will use `STRAPI_SYNC_TOKEN` if available, otherwise falls back to `STRAPI_TOKEN`.
+</Info>
+
+## File Upload Token (Optional)
+
+If you enable the `upload` feature, you'll need an additional token for file uploads:
+
+<Steps>
+  <Step title="Create Upload Token">
+    In Strapi admin: **Settings > API Tokens > Create new API Token**
+    
+    - **Token name**: `upload-token`
+    - **Token type**: `Custom`
+    - **Duration**: As needed
+    - **Permissions**:
+      - ✅ **Upload**
+        - `upload` (only)
+      - ❌ No delete or update permissions (security best practice)
+  </Step>
+  
+  <Step title="Add to Environment">
+    Add both the URL and token:
+    
+    ```bash .env
+    # Public URL for browser-side uploads
+    PUBLIC_STRAPI_URL=http://localhost:1337
+    
+    # Upload token: Create in Strapi Admin > Settings > API Tokens
+    # Set permissions: Upload > upload (only, no delete/update)
+    PUBLIC_STRAPI_UPLOAD_TOKEN=your-upload-token-here
+    ```
+    
+    <Note>
+    The `PUBLIC_` prefix makes these variables available in client-side code (framework-specific naming may vary).
+    </Note>
+  </Step>
+</Steps>
+
+## Verify Installation
+
+Run the sync command to verify everything is set up correctly:
+
+```bash
+npx strapi2front sync
+```
+
+You should see output like:
+
+```
+┌  strapi2front sync
+│
+◇  Configuration loaded
+◇  Version detection complete
+│  Strapi v5
+◇  Schema fetched: 5 collections, 2 singles, 8 components
+◇  Generated 45 files
+│
+├  Sync complete!
+│  Generated 45 files in src/strapi
+│
+│  Files generated:
+│    src/strapi/collections/article/types.ts
+│    src/strapi/collections/article/schemas.ts
+│    src/strapi/collections/article/service.ts
+│    src/strapi/collections/article/actions.ts
+│    ... and 41 more
+│
+│  Docs: https://strapi2front.dev/docs
+│
+└  Types, Services, Schemas, Actions ready to use!
+```
+
+<Tip>
+If you encounter any errors, check the [CLI Reference](/reference/cli) for troubleshooting common issues.
+</Tip>
+
+## Framework-Specific Setup
+
+### Astro
+
+<Steps>
+  <Step title="Install Astro dependencies">
+    ```bash
+    npm install @astrojs/node
+    ```
+  </Step>
+  
+  <Step title="Enable server output">
+    If using Astro Actions, ensure your `astro.config.mjs` has:
+    
+    ```javascript astro.config.mjs
+    import { defineConfig } from 'astro/config';
+    import node from '@astrojs/node';
+    
+    export default defineConfig({
+      output: 'server', // or 'hybrid'
+      adapter: node({
+        mode: 'standalone'
+      }),
+    });
+    ```
+  </Step>
+  
+  <Step title="Configure environment variables">
+    Astro uses `PUBLIC_` prefix for client-side variables:
+    
+    ```bash .env
+    STRAPI_URL=http://localhost:1337
+    STRAPI_SYNC_TOKEN=sync-token-here
+    STRAPI_TOKEN=frontend-token-here
+    PUBLIC_STRAPI_URL=http://localhost:1337
+    PUBLIC_STRAPI_UPLOAD_TOKEN=upload-token-here
+    ```
+  </Step>
+</Steps>
+
+### Next.js
+
+<Steps>
+  <Step title="Configure environment variables">
+    Next.js uses `NEXT_PUBLIC_` prefix for client-side variables:
+    
+    ```bash .env.local
+    STRAPI_URL=http://localhost:1337
+    STRAPI_SYNC_TOKEN=sync-token-here
+    STRAPI_TOKEN=frontend-token-here
+    NEXT_PUBLIC_STRAPI_URL=http://localhost:1337
+    NEXT_PUBLIC_STRAPI_UPLOAD_TOKEN=upload-token-here
+    ```
+  </Step>
+  
+  <Step title="Update strapi.config.ts">
+    Point output to your src/lib directory:
+    
+    ```typescript strapi.config.ts
+    export default defineConfig({
+      // ...
+      output: {
+        path: "src/lib/strapi",
+      },
+    });
+    ```
+  </Step>
+</Steps>
+
+### Nuxt
+
+<Steps>
+  <Step title="Configure environment variables">
+    Nuxt uses `NUXT_PUBLIC_` prefix:
+    
+    ```bash .env
+    STRAPI_URL=http://localhost:1337
+    STRAPI_SYNC_TOKEN=sync-token-here
+    STRAPI_TOKEN=frontend-token-here
+    NUXT_PUBLIC_STRAPI_URL=http://localhost:1337
+    NUXT_PUBLIC_STRAPI_UPLOAD_TOKEN=upload-token-here
+    ```
+  </Step>
+</Steps>
+
+### SvelteKit
+
+<Steps>
+  <Step title="Configure environment variables">
+    SvelteKit uses `PUBLIC_` prefix:
+    
+    ```bash .env
+    STRAPI_URL=http://localhost:1337
+    STRAPI_SYNC_TOKEN=sync-token-here
+    STRAPI_TOKEN=frontend-token-here
+    PUBLIC_STRAPI_URL=http://localhost:1337
+    PUBLIC_STRAPI_UPLOAD_TOKEN=upload-token-here
+    ```
+  </Step>
+</Steps>
+
+## NPM Scripts (Optional)
+
+Add convenient scripts to your `package.json`:
+
+```json package.json
+{
+  "scripts": {
+    "strapi:init": "strapi2front init",
+    "strapi:sync": "strapi2front sync",
+    "strapi:sync:force": "strapi2front sync --force",
+    "strapi:sync:types": "strapi2front sync --types-only"
+  }
+}
+```
+
+Now you can use:
+
+```bash
+npm run strapi:sync
+```
+
+## CI/CD Integration
+
+To sync types in your CI/CD pipeline:
+
+<CodeGroup>
+```yaml GitHub Actions
+name: Sync Strapi Types
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # Daily at 2am
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Sync Strapi schema
+        env:
+          STRAPI_URL: ${{ secrets.STRAPI_URL }}
+          STRAPI_SYNC_TOKEN: ${{ secrets.STRAPI_SYNC_TOKEN }}
+        run: npx strapi2front sync
+      
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git diff --staged --quiet || git commit -m "chore: sync Strapi types"
+          git push
+```
+
+```yaml GitLab CI
+sync-strapi:
+  image: node:20
+  only:
+    - schedules
+  script:
+    - npm ci
+    - npx strapi2front sync
+    - |
+      git config --global user.email "gitlab@example.com"
+      git config --global user.name "GitLab CI"
+      git add .
+      git diff --staged --quiet || git commit -m "chore: sync Strapi types"
+      git push https://oauth2:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git HEAD:${CI_COMMIT_REF_NAME}
+  variables:
+    STRAPI_URL: ${STRAPI_URL}
+    STRAPI_SYNC_TOKEN: ${STRAPI_SYNC_TOKEN}
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get started with your first query
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Explore all configuration options
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli-reference">
+    Learn all available commands
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/troubleshooting">
+    Common issues and solutions
+  </Card>
+</CardGroup>

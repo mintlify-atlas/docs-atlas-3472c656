@@ -1,0 +1,405 @@
+---
+title: Configuration Reference
+description: Complete strapi.config.ts schema with all options, types, and defaults
+---
+
+The `strapi.config.ts` file controls how strapi2front connects to your Strapi backend and generates code. Created by `strapi2front init`, it's validated with Zod for type safety.
+
+## Configuration File
+
+<CodeGroup>
+```typescript TypeScript
+import { defineConfig } from "strapi2front";
+
+export default defineConfig({
+  // Your configuration
+});
+```
+
+```javascript JavaScript (ESM)
+// @ts-check
+import { defineConfig } from "strapi2front";
+
+export default defineConfig({
+  // Your configuration  
+});
+```
+
+```javascript JavaScript (CommonJS)
+// @ts-check
+const { defineConfig } = require("strapi2front");
+
+module.exports = defineConfig({
+  // Your configuration
+});
+```
+</CodeGroup>
+
+<Info>
+The `defineConfig` helper provides TypeScript autocomplete and validation.
+</Info>
+
+---
+
+## Connection Options
+
+<ParamField path="url" type="string" required>
+  Strapi backend URL. Must be a valid URL.
+  
+  **Example:** `"http://localhost:1337"` or `"https://api.example.com"`
+  
+  Typically loaded from environment:
+  ```typescript
+  url: process.env.STRAPI_URL || "http://localhost:1337"
+  ```
+</ParamField>
+
+<ParamField path="token" type="string">
+  API token for syncing schema from Strapi. Optional but recommended.
+  
+  **Required permissions:**
+  - `content-type-builder.getContentTypes`
+  - `content-type-builder.getComponents`  
+  - `i18n.listLocales`
+  
+  Typically loaded from environment:
+  ```typescript
+  token: process.env.STRAPI_SYNC_TOKEN || process.env.STRAPI_TOKEN
+  ```
+  
+  <Warning>
+  The sync token should only be used in development. Never deploy it to production.
+  </Warning>
+</ParamField>
+
+<ParamField path="apiPrefix" type="string" default="/api">
+  API prefix used in your Strapi configuration. Change if you customized Strapi's REST API prefix.
+  
+  **Example:** `"/api/v1"` or `"/custom-api"`
+</ParamField>
+
+---
+
+## Strapi Version
+
+<ParamField path="strapiVersion" type="'v4' | 'v5'" default="v5">
+  Strapi major version. Affects schema parsing and type generation.
+  
+  - `"v5"` - Strapi 5.x (uses `documentId`, new relations format)
+  - `"v4"` - Strapi 4.x (uses numeric `id`)
+  
+  The CLI auto-detects version during sync and warns if there's a mismatch.
+</ParamField>
+
+---
+
+## Output Configuration
+
+<ParamField path="outputFormat" type="'typescript' | 'jsdoc'" default="typescript">
+  Code output format.
+  
+  - `"typescript"` - Generate `.ts` files with TypeScript syntax
+  - `"jsdoc"` - Generate `.js` files with JSDoc type annotations
+  
+  <Note>
+  Actions are only available in TypeScript mode. JSDoc projects can only generate types, services, schemas, and upload helpers.
+  </Note>
+</ParamField>
+
+<ParamField path="moduleType" type="'esm' | 'commonjs'">
+  Module system for JavaScript output (JSDoc only). Auto-detected from `package.json` if not specified.
+  
+  - `"esm"` - ES Modules (`import`/`export`)
+  - `"commonjs"` - CommonJS (`require`/`module.exports`)
+  
+  Only applies when `outputFormat: "jsdoc"`.
+</ParamField>
+
+<ParamField path="output.path" type="string" default="src/strapi">
+  Output directory for generated files, relative to project root.
+  
+  **Example:** `"src/lib/strapi"` or `"generated/strapi"`
+</ParamField>
+
+---
+
+## Features
+
+Control which files to generate. All features default to `true` except `upload`.
+
+<ParamField path="features.types" type="boolean" default={true}>
+  Generate TypeScript type definitions for all content types, components, and API responses.
+  
+  **Generates:**
+  - Type interfaces for each content type
+  - Component types
+  - Relation types
+  - API response wrappers
+  - Locale types
+</ParamField>
+
+<ParamField path="features.services" type="boolean" default={true}>
+  Generate service classes for API calls (CRUD operations, queries, filters).
+  
+  **Generates:**
+  - Service with methods like `findMany()`, `findOne()`, `create()`, `update()`, `delete()`
+  - Typed query builders
+  - Population helpers
+  - Locale switching
+</ParamField>
+
+<ParamField path="features.actions" type="boolean" default={true}>
+  Generate framework-specific server actions (currently Astro only).
+  
+  **Generates:**
+  - Type-safe server actions
+  - Automatic validation
+  - Error handling
+  
+  <Warning>
+  Only available when `outputFormat: "typescript"`
+  </Warning>
+</ParamField>
+
+<ParamField path="features.schemas" type="boolean">
+  Generate Zod validation schemas for form libraries (React Hook Form, TanStack Form, etc.).
+  
+  **Default:** `true` for TypeScript, `false` for JSDoc
+  
+  **Generates:**
+  - Zod schemas for create/update operations
+  - Field validation based on Strapi schema constraints
+  - Enum validation
+  - Required/optional field handling
+</ParamField>
+
+<ParamField path="features.upload" type="boolean" default={false}>
+  Generate file upload helpers for browser and server.
+  
+  **Generates:**
+  - Public upload client for browser
+  - Server action for secure uploads (framework-specific)
+  - Type-safe upload methods
+  
+  **Environment variables required:**
+  - `PUBLIC_STRAPI_URL`
+  - `PUBLIC_STRAPI_UPLOAD_TOKEN`
+</ParamField>
+
+---
+
+## Schema Options
+
+Customize validation schema generation.
+
+<ParamField path="schemaOptions.advancedRelations" type="boolean" default={false}>
+  Use advanced relation format with `connect`/`disconnect`/`set` operations instead of simple ID arrays.
+  
+  <Tabs>
+    <Tab title="Simple (default)">
+      ```typescript
+      { tags: ["id1", "id2"] }
+      ```
+    </Tab>
+    <Tab title="Advanced">
+      ```typescript
+      {
+        tags: {
+          connect: [{ documentId: "id1" }],
+          disconnect: [{ documentId: "id2" }],
+          set: [{ documentId: "id3" }]
+        }
+      }
+      ```
+    </Tab>
+  </Tabs>
+  
+  **Advanced format supports:**
+  - `connect` - Add relations while preserving existing
+  - `disconnect` - Remove specific relations  
+  - `set` - Replace all relations
+  - `locale` - Target specific locale for i18n content
+  - `status` - Target draft/published versions
+  - `position` - Control ordering (before, after, start, end)
+  
+  See [Strapi Relations Docs](https://docs.strapi.io/dev-docs/api/rest/relations)
+</ParamField>
+
+---
+
+## Advanced Options
+
+<ParamField path="options.includeDrafts" type="boolean" default={false}>
+  Include draft content types in generation. Only applies to content types with `draftAndPublish` enabled.
+  
+  When `true`, generated types will include draft-specific fields and methods.
+</ParamField>
+
+<ParamField path="options.strictTypes" type="boolean" default={false}>
+  Generate strict types with no optional fields. All fields marked as non-required in Strapi will still be required in TypeScript.
+  
+  <Warning>
+  Use with caution - this can cause type mismatches with actual API responses.
+  </Warning>
+</ParamField>
+
+---
+
+## Complete Example
+
+<CodeGroup>
+```typescript Minimal
+import { defineConfig } from "strapi2front";
+
+export default defineConfig({
+  url: process.env.STRAPI_URL || "http://localhost:1337",
+  token: process.env.STRAPI_SYNC_TOKEN,
+});
+```
+
+```typescript Full Configuration
+import { defineConfig } from "strapi2front";
+
+export default defineConfig({
+  // Connection
+  url: process.env.STRAPI_URL || "http://localhost:1337",
+  token: process.env.STRAPI_SYNC_TOKEN || process.env.STRAPI_TOKEN,
+  apiPrefix: "/api",
+  
+  // Strapi version
+  strapiVersion: "v5",
+  
+  // Output format
+  outputFormat: "typescript",
+  
+  // Output path
+  output: {
+    path: "src/strapi",
+  },
+  
+  // Features
+  features: {
+    types: true,
+    services: true,
+    actions: true,
+    schemas: true,
+    upload: true,
+  },
+  
+  // Schema options
+  schemaOptions: {
+    advancedRelations: false,
+  },
+  
+  // Advanced options
+  options: {
+    includeDrafts: false,
+    strictTypes: false,
+  },
+});
+```
+
+```javascript JSDoc (ESM)
+// @ts-check
+import { defineConfig } from "strapi2front";
+
+export default defineConfig({
+  url: process.env.STRAPI_URL || "http://localhost:1337",
+  token: process.env.STRAPI_SYNC_TOKEN || process.env.STRAPI_TOKEN,
+  
+  outputFormat: "jsdoc",
+  moduleType: "esm",
+  
+  output: {
+    path: "src/strapi",
+  },
+  
+  features: {
+    types: true,
+    services: true,
+    actions: false, // Not supported in JSDoc
+    schemas: true,
+    upload: true,
+  },
+  
+  strapiVersion: "v5",
+});
+```
+</CodeGroup>
+
+---
+
+## Type Definitions
+
+```typescript
+export interface StrapiIntegrateConfig {
+  url: string;
+  token?: string;
+  apiPrefix: string;
+  strapiVersion: "v4" | "v5";
+  outputFormat: "typescript" | "jsdoc";
+  moduleType?: "esm" | "commonjs";
+  output: {
+    path: string;
+  };
+  features: {
+    types: boolean;
+    services: boolean;
+    actions: boolean;
+    schemas?: boolean;
+    upload: boolean;
+  };
+  schemaOptions: {
+    advancedRelations: boolean;
+  };
+  options: {
+    includeDrafts: boolean;
+    strictTypes: boolean;
+  };
+}
+
+export type StrapiIntegrateConfigInput = /* Zod input type with defaults */;
+```
+
+---
+
+## Config File Location
+
+The CLI searches for config files in this order:
+
+1. `strapi.config.ts`
+2. `strapi.config.js`
+3. `strapi.config.mjs`
+4. `strapi.config.cjs`
+
+Place your config file in the project root (same directory as `package.json`).
+
+---
+
+## Environment Variables
+
+The config loader automatically resolves environment variables from `.env` files using `dotenv`. Variables are loaded before config parsing.
+
+**Supported patterns:**
+- `process.env.VARIABLE_NAME`
+- Direct environment variable access
+- Fallback chains: `process.env.VAR1 || process.env.VAR2 || "default"`
+
+**Special handling:**
+- `token` field: Automatically tries `STRAPI_SYNC_TOKEN` → `STRAPI_TOKEN` if not explicitly set
+
+---
+
+## Validation
+
+Configuration is validated using Zod with the `configSchema`. Invalid configurations will throw detailed error messages.
+
+```typescript
+import { configSchema } from 'strapi2front/core';
+
+// Validate manually
+const result = configSchema.safeParse(yourConfig);
+if (!result.success) {
+  console.error(result.error);
+}
+```

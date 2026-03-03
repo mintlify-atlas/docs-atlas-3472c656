@@ -1,0 +1,550 @@
+---
+title: Types Reference
+description: TypeScript types and interfaces exported by strapi2front core and CLI packages
+---
+
+This page documents the TypeScript types and interfaces exported by strapi2front for programmatic usage and type safety.
+
+## Configuration Types
+
+### `StrapiIntegrateConfig`
+
+Fully resolved and validated configuration object.
+
+```typescript
+export interface StrapiIntegrateConfig {
+  url: string;
+  token?: string;
+  apiPrefix: string;
+  strapiVersion: "v4" | "v5";
+  outputFormat: "typescript" | "jsdoc";
+  moduleType?: "esm" | "commonjs";
+  output: {
+    path: string;
+  };
+  features: {
+    types: boolean;
+    services: boolean;
+    actions: boolean;
+    schemas?: boolean;
+    upload: boolean;
+  };
+  schemaOptions: {
+    advancedRelations: boolean;
+  };
+  options: {
+    includeDrafts: boolean;
+    strictTypes: boolean;
+  };
+}
+```
+
+<Accordion title="Field Descriptions">
+  <ResponseField name="url" type="string" required>
+    Strapi backend URL (validated as valid URL)
+  </ResponseField>
+  
+  <ResponseField name="token" type="string">
+    API token for schema sync
+  </ResponseField>
+  
+  <ResponseField name="apiPrefix" type="string" default="/api">
+    Strapi REST API prefix
+  </ResponseField>
+  
+  <ResponseField name="strapiVersion" type="'v4' | 'v5'" default="v5">
+    Strapi major version
+  </ResponseField>
+  
+  <ResponseField name="outputFormat" type="'typescript' | 'jsdoc'" default="typescript">
+    Output file format
+  </ResponseField>
+  
+  <ResponseField name="moduleType" type="'esm' | 'commonjs'">
+    Module system for JSDoc output
+  </ResponseField>
+  
+  <ResponseField name="output.path" type="string" default="src/strapi">
+    Output directory path
+  </ResponseField>
+  
+  <ResponseField name="features" type="object" required>
+    Feature flags for code generation
+  </ResponseField>
+  
+  <ResponseField name="schemaOptions.advancedRelations" type="boolean" default={false}>
+    Use advanced relation format
+  </ResponseField>
+  
+  <ResponseField name="options.includeDrafts" type="boolean" default={false}>
+    Include draft content types
+  </ResponseField>
+  
+  <ResponseField name="options.strictTypes" type="boolean" default={false}>
+    Generate strict types (no optional fields)
+  </ResponseField>
+</Accordion>
+
+### `StrapiIntegrateConfigInput`
+
+Input type for `defineConfig()` - Zod's input type with optional fields and defaults.
+
+```typescript
+import type { StrapiIntegrateConfigInput } from 'strapi2front';
+
+const config: StrapiIntegrateConfigInput = {
+  url: "http://localhost:1337",
+  // All other fields optional with defaults
+};
+```
+
+---
+
+## CLI Command Types
+
+### `InitCommandOptions`
+
+Options for the `init` command.
+
+```typescript
+export interface InitCommandOptions {
+  yes?: boolean;      // Skip prompts, use defaults
+  url?: string;       // Strapi URL
+  token?: string;     // Strapi sync token
+  framework?: string; // Framework (e.g., "astro")
+}
+```
+
+**Usage:**
+
+```typescript
+import { initCommand } from 'strapi2front';
+import type { InitCommandOptions } from 'strapi2front';
+
+const options: InitCommandOptions = {
+  yes: true,
+  url: 'http://localhost:1337',
+  framework: 'astro'
+};
+
+await initCommand(options);
+```
+
+### `SyncCommandOptions`
+
+Options for the `sync` command.
+
+```typescript
+export interface SyncCommandOptions {
+  force?: boolean;        // Force regeneration
+  typesOnly?: boolean;    // Only generate types
+  servicesOnly?: boolean; // Only generate services
+  actionsOnly?: boolean;  // Only generate actions
+  schemasOnly?: boolean;  // Only generate schemas
+  uploadOnly?: boolean;   // Only generate upload helpers
+}
+```
+
+**Usage:**
+
+```typescript
+import { syncCommand } from 'strapi2front';
+import type { SyncCommandOptions } from 'strapi2front';
+
+const options: SyncCommandOptions = {
+  force: true,
+  typesOnly: false
+};
+
+await syncCommand(options);
+```
+
+---
+
+## Schema Types
+
+Types representing Strapi schema structure.
+
+### `StrapiSchema`
+
+Raw schema from Strapi API.
+
+```typescript
+export interface StrapiSchema {
+  contentTypes: ContentTypeSchema[];
+  components: ComponentSchema[];
+  locales: StrapiLocale[];
+}
+```
+
+### `StrapiLocale`
+
+Locale configuration from Strapi i18n plugin.
+
+```typescript
+export interface StrapiLocale {
+  id: number;
+  documentId: string;
+  name: string;           // e.g., "English (en)"
+  code: string;           // e.g., "en"
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string;
+}
+```
+
+### `ContentTypeSchema`
+
+Content type schema from Strapi (v5 structure).
+
+```typescript
+export interface ContentTypeSchema {
+  uid: string;                    // e.g., "api::article.article"
+  apiID: string;                  // e.g., "article"
+  plugin?: string;                // Plugin name if from plugin
+  schema: {
+    kind: "collectionType" | "singleType";
+    singularName: string;         // e.g., "article"
+    pluralName: string;           // e.g., "articles"
+    displayName: string;          // e.g., "Article"
+    description?: string;
+    draftAndPublish?: boolean;
+    visible?: boolean;
+    pluginOptions?: Record<string, unknown>;
+    attributes: Record<string, Attribute>;
+  };
+}
+```
+
+### `ComponentSchema`
+
+Component schema from Strapi.
+
+```typescript
+export interface ComponentSchema {
+  uid: string;                    // e.g., "layout.hero"
+  category: string;               // e.g., "layout"
+  apiId: string;                  // e.g., "hero"
+  schema: {
+    displayName: string;          // e.g., "Hero Section"
+    description?: string;
+    collectionName?: string;
+    attributes: Record<string, Attribute>;
+  };
+}
+```
+
+### `ParsedSchema`
+
+Simplified schema after parsing (used for code generation).
+
+```typescript
+export interface ParsedSchema {
+  collections: CollectionType[];  // Collection content types
+  singles: SingleType[];          // Single content types
+  components: ComponentType[];    // Components
+}
+```
+
+### `CollectionType`
+
+```typescript
+export interface CollectionType {
+  uid: string;
+  apiId: string;
+  singularName: string;
+  pluralName: string;
+  displayName: string;
+  description?: string;
+  draftAndPublish: boolean;
+  localized: boolean;             // Has i18n enabled
+  attributes: Record<string, Attribute>;
+}
+```
+
+### `SingleType`
+
+```typescript
+export interface SingleType {
+  uid: string;
+  apiId: string;
+  singularName: string;
+  displayName: string;
+  description?: string;
+  draftAndPublish: boolean;
+  localized: boolean;
+  attributes: Record<string, Attribute>;
+}
+```
+
+### `ComponentType`
+
+```typescript
+export interface ComponentType {
+  uid: string;
+  category: string;
+  name: string;
+  displayName: string;
+  description?: string;
+  attributes: Record<string, Attribute>;
+}
+```
+
+---
+
+## Attribute Types
+
+Types representing Strapi field attributes.
+
+### `AttributeType`
+
+Union of all possible attribute type strings.
+
+```typescript
+export type AttributeType =
+  | "string"
+  | "text"
+  | "richtext"
+  | "blocks"          // Strapi v5 rich text
+  | "email"
+  | "password"
+  | "uid"
+  | "integer"
+  | "biginteger"
+  | "float"
+  | "decimal"
+  | "boolean"
+  | "date"
+  | "time"
+  | "datetime"
+  | "timestamp"
+  | "json"
+  | "enumeration"
+  | "media"
+  | "relation"
+  | "component"
+  | "dynamiczone";
+```
+
+### `BaseAttribute`
+
+Common fields for all attributes.
+
+```typescript
+export interface BaseAttribute {
+  type: AttributeType;
+  required?: boolean;
+  unique?: boolean;
+  private?: boolean;
+  configurable?: boolean;
+  default?: unknown;
+}
+```
+
+### `StringAttribute`
+
+```typescript
+export interface StringAttribute extends BaseAttribute {
+  type: "string" | "text" | "richtext" | "email" | "password" | "uid";
+  minLength?: number;
+  maxLength?: number;
+  regex?: string;
+}
+```
+
+### `BlocksAttribute`
+
+Strapi v5 blocks editor field.
+
+```typescript
+export interface BlocksAttribute extends BaseAttribute {
+  type: "blocks";
+}
+```
+
+### `NumberAttribute`
+
+```typescript
+export interface NumberAttribute extends BaseAttribute {
+  type: "integer" | "biginteger" | "float" | "decimal";
+  min?: number;
+  max?: number;
+}
+```
+
+### `BooleanAttribute`
+
+```typescript
+export interface BooleanAttribute extends BaseAttribute {
+  type: "boolean";
+}
+```
+
+### `DateAttribute`
+
+```typescript
+export interface DateAttribute extends BaseAttribute {
+  type: "date" | "time" | "datetime" | "timestamp";
+}
+```
+
+### `JsonAttribute`
+
+```typescript
+export interface JsonAttribute extends BaseAttribute {
+  type: "json";
+}
+```
+
+### `EnumerationAttribute`
+
+```typescript
+export interface EnumerationAttribute extends BaseAttribute {
+  type: "enumeration";
+  enum: string[];  // Allowed values
+}
+```
+
+### `MediaAttribute`
+
+```typescript
+export interface MediaAttribute extends BaseAttribute {
+  type: "media";
+  multiple?: boolean;
+  allowedTypes?: ("images" | "videos" | "files" | "audios")[];
+}
+```
+
+### `RelationAttribute`
+
+```typescript
+export interface RelationAttribute extends BaseAttribute {
+  type: "relation";
+  relation: "oneToOne" | "oneToMany" | "manyToOne" | "manyToMany";
+  target: string;      // Target content type UID
+  inversedBy?: string; // Field name in target
+  mappedBy?: string;   // Field name in target (inverse)
+}
+```
+
+### `ComponentAttribute`
+
+```typescript
+export interface ComponentAttribute extends BaseAttribute {
+  type: "component";
+  component: string;   // Component UID
+  repeatable?: boolean;
+}
+```
+
+### `DynamicZoneAttribute`
+
+```typescript
+export interface DynamicZoneAttribute extends BaseAttribute {
+  type: "dynamiczone";
+  components: string[];  // Allowed component UIDs
+}
+```
+
+### `Attribute`
+
+Union of all attribute types.
+
+```typescript
+export type Attribute =
+  | StringAttribute
+  | BlocksAttribute
+  | NumberAttribute
+  | BooleanAttribute
+  | DateAttribute
+  | JsonAttribute
+  | EnumerationAttribute
+  | MediaAttribute
+  | RelationAttribute
+  | ComponentAttribute
+  | DynamicZoneAttribute;
+```
+
+---
+
+## Utility Types
+
+### `StrapiVersion`
+
+```typescript
+export type StrapiVersion = "v4" | "v5";
+```
+
+---
+
+## Import Paths
+
+<CodeGroup>
+```typescript Configuration & CLI
+import type { 
+  StrapiIntegrateConfig,
+  StrapiIntegrateConfigInput,
+  InitCommandOptions,
+  SyncCommandOptions
+} from 'strapi2front';
+```
+
+```typescript Core Package
+import type {
+  StrapiIntegrateConfig,
+  StrapiIntegrateConfigInput
+} from '@strapi2front/core';
+```
+
+```typescript Schema Types
+import type {
+  StrapiSchema,
+  StrapiLocale,
+  ContentTypeSchema,
+  ComponentSchema,
+  ParsedSchema,
+  CollectionType,
+  SingleType,
+  ComponentType,
+  Attribute,
+  AttributeType,
+  // ... specific attribute types
+} from '@strapi2front/core';
+```
+</CodeGroup>
+
+---
+
+## Type Guards
+
+While not exported, you can create type guards for attribute discrimination:
+
+```typescript
+function isRelationAttribute(attr: Attribute): attr is RelationAttribute {
+  return attr.type === 'relation';
+}
+
+function isMediaAttribute(attr: Attribute): attr is MediaAttribute {
+  return attr.type === 'media';
+}
+
+function isComponentAttribute(attr: Attribute): attr is ComponentAttribute {
+  return attr.type === 'component';
+}
+```
+
+---
+
+## Generated Types
+
+The types above are for strapi2front's internal structure. When you run `strapi2front sync`, it generates types specific to your Strapi schema:
+
+```typescript
+// Generated in your output directory
+import type { Article, Author } from './strapi/collections/article';
+import type { Homepage } from './strapi/singles/homepage';
+import type { Hero } from './strapi/components/layout/hero';
+```
+
+See the [Types Guide](/guides/types) for details on working with generated types.

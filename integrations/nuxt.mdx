@@ -1,0 +1,761 @@
+---
+title: "Nuxt Integration"
+description: "Use Strapi2Front with Nuxt for type-safe data fetching and server routes"
+---
+
+<Info>
+  **Prerequisites**:
+  - Nuxt 3.0 or higher
+  - TypeScript enabled in your Nuxt project
+  - Strapi v4 or v5 backend
+</Info>
+
+Strapi2Front generates TypeScript types, services, and Zod schemas for your Nuxt applications. Server Routes generation is coming soon.
+
+## Current Support
+
+<CardGroup cols={2}>
+  <Card title="TypeScript Types" icon="check">
+    Fully typed interfaces for all content types
+  </Card>
+  
+  <Card title="Service Functions" icon="check">
+    Ready-to-use data fetching functions
+  </Card>
+  
+  <Card title="Zod Schemas" icon="check">
+    Validation schemas for forms and mutations
+  </Card>
+  
+  <Card title="Server Routes" icon="clock">
+    Coming soon in a future release
+  </Card>
+</CardGroup>
+
+## Setup
+
+<Steps>
+<Step title="Install Strapi2Front">
+
+Install the package in your Nuxt project:
+
+```bash
+npm install strapi2front
+```
+
+</Step>
+
+<Step title="Initialize Configuration">
+
+Run the init command to create a configuration file:
+
+```bash
+npx strapi2front init
+```
+
+</Step>
+
+<Step title="Configure for Nuxt">
+
+Update your `strapi2front.config.ts`:
+
+```typescript strapi2front.config.ts
+import { defineConfig } from 'strapi2front';
+
+export default defineConfig({
+  strapiUrl: process.env.NUXT_PUBLIC_STRAPI_URL || 'http://localhost:1337',
+  strapiVersion: 'v5', // or 'v4'
+  output: {
+    path: './composables/strapi',
+    structure: 'by-feature',
+  },
+  features: {
+    types: true,
+    services: true,
+    schemas: true,
+    // Server Routes coming soon
+  },
+});
+```
+
+</Step>
+
+<Step title="Add Environment Variables">
+
+Create a `.env` file:
+
+```bash .env
+NUXT_PUBLIC_STRAPI_URL=https://your-strapi-instance.com
+STRAPI_API_TOKEN=your-api-token-here
+```
+
+</Step>
+
+<Step title="Generate Code">
+
+Run the sync command:
+
+```bash
+npx strapi2front sync
+```
+
+This generates:
+
+```
+composables/strapi/
+├── collections/
+│   └── article/
+│       ├── types.ts
+│       ├── schemas.ts
+│       └── service.ts
+├── singles/
+│   └── homepage/
+│       ├── types.ts
+│       ├── schemas.ts
+│       └── service.ts
+└── shared/
+    ├── client.ts
+    └── utils.ts
+```
+
+</Step>
+</Steps>
+
+## Usage
+
+### Server-Side Rendering
+
+Fetch data in your pages using `useAsyncData` or `useFetch`:
+
+<CodeGroup>
+```vue pages/blog/index.vue
+<script setup lang="ts">
+import { articleService } from '~/composables/strapi/collections/article/service';
+
+const page = ref(1);
+const pageSize = 10;
+
+// Fetch articles with SSR
+const { data: articlesData, pending, error } = await useAsyncData(
+  `articles-page-${page.value}`,
+  async () => {
+    return await articleService.findMany({
+      pagination: {
+        page: page.value,
+        pageSize,
+      },
+      sort: ['publishedAt:desc'],
+      populate: ['author', 'coverImage'],
+    });
+  },
+  {
+    watch: [page],
+  }
+);
+
+const articles = computed(() => articlesData.value?.data || []);
+const pagination = computed(() => articlesData.value?.pagination);
+</script>
+
+<template>
+  <div>
+    <div v-if="pending">Loading...</div>
+    <div v-else-if="error">Error loading articles</div>
+    <div v-else class="blog-grid">
+      <article v-for="article in articles" :key="article.documentId">
+        <h2>{{ article.title }}</h2>
+        <p>{{ article.excerpt }}</p>
+        <NuxtLink :to="`/blog/${article.slug}`">
+          Read more
+        </NuxtLink>
+      </article>
+      
+      <Pagination 
+        :current-page="pagination.page"
+        :total-pages="pagination.pageCount"
+        @update:page="page = $event"
+      />
+    </div>
+  </div>
+</template>
+```
+
+```vue pages/blog/[slug].vue
+<script setup lang="ts">
+import { articleService } from '~/composables/strapi/collections/article/service';
+
+const route = useRoute();
+const slug = route.params.slug as string;
+
+// Fetch article by slug
+const { data: article } = await useAsyncData(
+  `article-${slug}`,
+  async () => {
+    return await articleService.findBySlug(slug, {
+      populate: ['author', 'categories', 'coverImage'],
+    });
+  }
+);
+
+if (!article.value) {
+  throw createError({
+    statusCode: 404,
+    message: 'Article not found',
+  });
+}
+
+useHead({
+  title: article.value.title,
+  meta: [
+    { name: 'description', content: article.value.excerpt },
+  ],
+});
+</script>
+
+<template>
+  <article v-if="article">
+    <h1>{{ article.title }}</h1>
+    <div class="author">
+      By {{ article.author.name }}
+    </div>
+    <div v-html="article.content" />
+  </article>
+</template>
+```
+</CodeGroup>
+
+### Client-Side Fetching
+
+Fetch data on the client with reactivity:
+
+```vue components/ArticleList.vue
+<script setup lang="ts">
+import type { Article } from '~/composables/strapi/collections/article/types';
+
+const articles = ref<Article[]>([]);
+const loading = ref(true);
+const error = ref<Error | null>(null);
+
+onMounted(async () => {
+  try {
+    const { data } = await $fetch('/api/articles');
+    articles.value = data;
+  } catch (e) {
+    error.value = e as Error;
+  } finally {
+    loading.value = false;
+  }
+});
+</script>
+
+<template>
+  <div>
+    <div v-if="loading">Loading...</div>
+    <div v-else-if="error">Error: {{ error.message }}</div>
+    <div v-else class="article-list">
+      <div v-for="article in articles" :key="article.documentId">
+        <h3>{{ article.title }}</h3>
+        <p>{{ article.excerpt }}</p>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+### Server API Routes
+
+Create API routes using the generated services:
+
+<CodeGroup>
+```typescript server/api/articles/index.get.ts
+import { articleService } from '~/composables/strapi/collections/article/service';
+
+export default defineEventHandler(async (event) => {
+  const query = getQuery(event);
+  const page = Number(query.page) || 1;
+  const pageSize = Number(query.pageSize) || 10;
+
+  try {
+    const result = await articleService.findMany({
+      pagination: { page, pageSize },
+      sort: ['publishedAt:desc'],
+      populate: ['author'],
+    });
+
+    return result;
+  } catch (error) {
+    throw createError({
+      statusCode: 500,
+      message: 'Failed to fetch articles',
+    });
+  }
+});
+```
+
+```typescript server/api/articles/[id].get.ts
+import { articleService } from '~/composables/strapi/collections/article/service';
+
+export default defineEventHandler(async (event) => {
+  const id = getRouterParam(event, 'id');
+  
+  if (!id) {
+    throw createError({
+      statusCode: 400,
+      message: 'Article ID is required',
+    });
+  }
+
+  const article = await articleService.findOne(id, {
+    populate: ['author', 'categories'],
+  });
+
+  if (!article) {
+    throw createError({
+      statusCode: 404,
+      message: 'Article not found',
+    });
+  }
+
+  return article;
+});
+```
+
+```typescript server/api/contact.post.ts
+import { contactService } from '~/composables/strapi/collections/contact/service';
+import { contactSchema } from '~/composables/strapi/collections/contact/schemas';
+
+export default defineEventHandler(async (event) => {
+  const body = await readBody(event);
+
+  try {
+    // Validate with Zod schema
+    const validatedData = contactSchema.parse(body);
+    
+    // Create contact entry
+    const contact = await contactService.create(validatedData);
+    
+    return { success: true, data: contact };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw createError({
+        statusCode: 400,
+        message: 'Validation failed',
+        data: error.errors,
+      });
+    }
+    
+    throw createError({
+      statusCode: 500,
+      message: 'Internal server error',
+    });
+  }
+});
+```
+</CodeGroup>
+
+### Composables
+
+Create reusable composables for common data fetching patterns:
+
+```typescript composables/useArticles.ts
+import { articleService } from '~/composables/strapi/collections/article/service';
+import type { Article } from '~/composables/strapi/collections/article/types';
+
+export function useArticles(initialPage = 1, pageSize = 10) {
+  const page = ref(initialPage);
+  const articles = ref<Article[]>([]);
+  const pagination = ref<StrapiPagination | null>(null);
+  const loading = ref(false);
+  const error = ref<Error | null>(null);
+
+  const fetchArticles = async () => {
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      const result = await articleService.findMany({
+        pagination: {
+          page: page.value,
+          pageSize,
+        },
+        sort: ['publishedAt:desc'],
+        populate: ['author'],
+      });
+      
+      articles.value = result.data;
+      pagination.value = result.pagination;
+    } catch (e) {
+      error.value = e as Error;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const nextPage = () => {
+    if (pagination.value && page.value < pagination.value.pageCount) {
+      page.value++;
+    }
+  };
+
+  const prevPage = () => {
+    if (page.value > 1) {
+      page.value--;
+    }
+  };
+
+  // Auto-fetch on page change
+  watch(page, fetchArticles);
+
+  // Initial fetch
+  onMounted(fetchArticles);
+
+  return {
+    articles,
+    pagination,
+    loading,
+    error,
+    page,
+    nextPage,
+    prevPage,
+    refresh: fetchArticles,
+  };
+}
+```
+
+Use the composable in your components:
+
+```vue pages/blog.vue
+<script setup lang="ts">
+const { articles, loading, error, pagination, nextPage, prevPage } = useArticles();
+</script>
+
+<template>
+  <div>
+    <div v-if="loading">Loading...</div>
+    <div v-else-if="error">Error: {{ error.message }}</div>
+    <div v-else>
+      <article v-for="article in articles" :key="article.documentId">
+        <h2>{{ article.title }}</h2>
+      </article>
+      
+      <button @click="prevPage" :disabled="pagination?.page === 1">
+        Previous
+      </button>
+      <button @click="nextPage" :disabled="pagination?.page === pagination?.pageCount">
+        Next
+      </button>
+    </div>
+  </div>
+</template>
+```
+
+### Form Handling
+
+Validate forms with Zod schemas:
+
+```vue components/ContactForm.vue
+<script setup lang="ts">
+import { contactSchema } from '~/composables/strapi/collections/contact/schemas';
+import type { z } from 'zod';
+
+type ContactForm = z.infer<typeof contactSchema>;
+
+const formData = reactive<ContactForm>({
+  name: '',
+  email: '',
+  message: '',
+});
+
+const errors = ref<Record<string, string>>({});
+const submitting = ref(false);
+const success = ref(false);
+
+const handleSubmit = async () => {
+  errors.value = {};
+  submitting.value = true;
+  success.value = false;
+
+  try {
+    // Validate with Zod
+    const validated = contactSchema.parse(formData);
+    
+    // Submit to API
+    await $fetch('/api/contact', {
+      method: 'POST',
+      body: validated,
+    });
+    
+    success.value = true;
+    // Reset form
+    Object.assign(formData, { name: '', email: '', message: '' });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      error.errors.forEach((err) => {
+        if (err.path[0]) {
+          errors.value[err.path[0] as string] = err.message;
+        }
+      });
+    }
+  } finally {
+    submitting.value = false;
+  }
+};
+</script>
+
+<template>
+  <form @submit.prevent="handleSubmit">
+    <div>
+      <input v-model="formData.name" placeholder="Name" />
+      <span v-if="errors.name" class="error">{{ errors.name }}</span>
+    </div>
+
+    <div>
+      <input v-model="formData.email" type="email" placeholder="Email" />
+      <span v-if="errors.email" class="error">{{ errors.email }}</span>
+    </div>
+
+    <div>
+      <textarea v-model="formData.message" placeholder="Message" />
+      <span v-if="errors.message" class="error">{{ errors.message }}</span>
+    </div>
+
+    <button type="submit" :disabled="submitting">
+      {{ submitting ? 'Sending...' : 'Send Message' }}
+    </button>
+
+    <p v-if="success" class="success">Message sent successfully!</p>
+  </form>
+</template>
+```
+
+## Service Functions Reference
+
+All generated services include these methods:
+
+### Collection Types
+
+<Tabs>
+  <Tab title="findMany">
+    Fetch multiple items with pagination:
+
+    ```typescript
+    const { data, pagination } = await articleService.findMany({
+      filters: {
+        publishedAt: { $notNull: true },
+      },
+      pagination: {
+        page: 1,
+        pageSize: 25,
+      },
+      sort: ['publishedAt:desc'],
+      populate: ['author'],
+      locale: 'en',
+      status: 'published',
+    });
+    ```
+  </Tab>
+
+  <Tab title="findAll">
+    Fetch all items automatically:
+
+    ```typescript
+    const articles = await articleService.findAll({
+      sort: ['createdAt:desc'],
+    });
+    ```
+  </Tab>
+
+  <Tab title="findOne">
+    Fetch a single item:
+
+    ```typescript
+    const article = await articleService.findOne('doc_123', {
+      populate: ['author', 'categories'],
+    });
+    ```
+  </Tab>
+
+  <Tab title="findBySlug">
+    Fetch by slug:
+
+    ```typescript
+    const article = await articleService.findBySlug('my-article');
+    ```
+  </Tab>
+
+  <Tab title="create">
+    Create new item:
+
+    ```typescript
+    const article = await articleService.create({
+      title: 'New Article',
+      content: 'Content...',
+    });
+    ```
+  </Tab>
+
+  <Tab title="update">
+    Update item:
+
+    ```typescript
+    const updated = await articleService.update('doc_123', {
+      title: 'Updated',
+    });
+    ```
+  </Tab>
+
+  <Tab title="delete">
+    Delete item:
+
+    ```typescript
+    await articleService.delete('doc_123');
+    ```
+  </Tab>
+
+  <Tab title="count">
+    Count items:
+
+    ```typescript
+    const total = await articleService.count({
+      publishedAt: { $notNull: true },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Advanced Patterns
+
+### Static Site Generation
+
+Pre-render pages at build time:
+
+```vue pages/blog/[slug].vue
+<script setup lang="ts">
+import { articleService } from '~/composables/strapi/collections/article/service';
+
+const route = useRoute();
+const slug = route.params.slug as string;
+
+const { data: article } = await useAsyncData(`article-${slug}`, () =>
+  articleService.findBySlug(slug)
+);
+</script>
+```
+
+Configure `nuxt.config.ts` for SSG:
+
+```typescript nuxt.config.ts
+export default defineNuxtConfig({
+  nitro: {
+    prerender: {
+      crawlLinks: true,
+      routes: ['/'],
+    },
+  },
+});
+```
+
+### Data Caching
+
+Cache data with `cachedFunction`:
+
+```typescript server/utils/cache.ts
+import { articleService } from '~/composables/strapi/collections/article/service';
+
+export const getCachedArticles = cachedFunction(
+  async () => {
+    return await articleService.findMany({
+      pagination: { pageSize: 10 },
+    });
+  },
+  {
+    maxAge: 60 * 10, // Cache for 10 minutes
+    name: 'articles',
+    getKey: () => 'all',
+  }
+);
+```
+
+### Parallel Requests
+
+Fetch multiple resources in parallel:
+
+```typescript
+const [homepage, articles, categories] = await Promise.all([
+  homepageService.find(),
+  articleService.findMany({ pagination: { pageSize: 5 } }),
+  categoryService.findAll(),
+]);
+```
+
+## Server Routes (Coming Soon)
+
+<Note>
+  Server Routes generation for Nuxt is in development and will be available in a future release.
+</Note>
+
+When available, server routes will be automatically generated:
+
+```typescript
+// Future: Auto-generated server routes
+// server/api/articles/index.get.ts
+// server/api/articles/[id].get.ts
+// server/api/articles/index.post.ts
+// etc.
+```
+
+## Best Practices
+
+<Tip>
+  Use `useAsyncData` or `useFetch` for SSR data fetching to benefit from automatic hydration.
+</Tip>
+
+<Warning>
+  Keep your `STRAPI_API_TOKEN` secure and only use it in server-side code (API routes, server middleware).
+</Warning>
+
+<Tip>
+  Create composables for common data fetching patterns to keep your code DRY.
+</Tip>
+
+<Note>
+  Use `watch` in `useAsyncData` to automatically refetch when dependencies change.
+</Note>
+
+## Troubleshooting
+
+### Hydration Mismatch
+
+Ensure you're using `useAsyncData` or `useFetch` for SSR data fetching.
+
+### Type Errors
+
+Regenerate types after schema changes:
+
+```bash
+npx strapi2front sync
+```
+
+### CORS Issues
+
+Configure CORS in your Strapi backend to allow requests from your Nuxt domain.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Services" icon="gear" href="/guides/services">
+    Learn about service functions
+  </Card>
+  
+  <Card title="Schemas" icon="shield-check" href="/guides/schemas">
+    Use Zod schemas for validation
+  </Card>
+  
+  <Card title="Relations" icon="link" href="/guides/relations">
+    Work with Strapi relations
+  </Card>
+  
+  <Card title="Types" icon="code" href="/guides/types">
+    Understand TypeScript types
+  </Card>
+</CardGroup>

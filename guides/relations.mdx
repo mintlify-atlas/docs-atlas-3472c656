@@ -1,0 +1,653 @@
+---
+title: Working with Relations
+description: Fetch, populate, and manage related content between Strapi content types
+---
+
+Strapi relations connect content types together. strapi2front generates fully-typed interfaces and helpers for working with all relation types.
+
+## Relation Types
+
+Strapi supports four relation types, all handled automatically by strapi2front:
+
+<CardGroup cols={2}>
+  <Card title="One-to-One" icon="link">
+    Single item relates to single item (e.g., Article → Author)
+  </Card>
+  <Card title="One-to-Many" icon="diagram-project">
+    Single item relates to multiple items (e.g., Author → Articles)
+  </Card>
+  <Card title="Many-to-One" icon="arrow-right">
+    Multiple items relate to single item (e.g., Articles → Category)
+  </Card>
+  <Card title="Many-to-Many" icon="network-wired">
+    Multiple items relate to multiple items (e.g., Articles ↔ Tags)
+  </Card>
+</CardGroup>
+
+## Generated Types for Relations
+
+### To-One Relations
+
+For **one-to-one** and **many-to-one** relations, the generated type is nullable:
+
+```typescript article.ts
+import type { Author } from './author';
+import type { Category } from './category';
+
+export interface Article extends StrapiBaseEntity {
+  title: string;
+  
+  // Many-to-one: many articles can have the same author
+  author: Author | null;
+  
+  // Many-to-one: many articles can be in the same category
+  primaryCategory: Category | null;
+}
+```
+
+### To-Many Relations
+
+For **one-to-many** and **many-to-many** relations, the generated type is an array:
+
+```typescript article.ts
+import type { Category } from './category';
+import type { Tag } from './tag';
+
+export interface Article extends StrapiBaseEntity {
+  title: string;
+  
+  // Many-to-many: articles can have multiple categories
+  categories: Category[];
+  
+  // Many-to-many: articles can have multiple tags
+  tags: Tag[];
+}
+```
+
+## Populating Relations
+
+By default, Strapi returns only relation IDs. Use `populate` to fetch the full related data.
+
+### Basic Population
+
+<Tabs>
+  <Tab title="Populate All">
+    ```typescript
+    // Populate all first-level relations
+    const article = await articleService.findOne('abc123', {
+      populate: '*',
+    });
+    
+    // Now you can access full relation data
+    console.log(article.author?.name);
+    console.log(article.categories.map(c => c.name));
+    ```
+    
+    <Warning>
+    Using `populate: '*'` can be slow and return large responses. Use selective population in production.
+    </Warning>
+  </Tab>
+  
+  <Tab title="Selective Population">
+    ```typescript
+    // Populate specific relations only
+    const article = await articleService.findOne('abc123', {
+      populate: ['author', 'categories', 'coverImage'],
+    });
+    
+    // author and categories are fully populated
+    console.log(article.author?.name);
+    console.log(article.categories[0]?.slug);
+    
+    // tags are not populated (only IDs)
+    ```
+  </Tab>
+  
+  <Tab title="Deep Population">
+    ```typescript
+    // Populate nested relations
+    const article = await articleService.findOne('abc123', {
+      populate: {
+        author: {
+          populate: ['avatar', 'socialLinks'],
+        },
+        categories: {
+          populate: ['icon'],
+        },
+        tags: true,
+      },
+    });
+    
+    // Access nested data
+    console.log(article.author?.avatar?.url);
+    console.log(article.categories[0]?.icon?.url);
+    ```
+  </Tab>
+</Tabs>
+
+### Population in Queries
+
+```typescript
+// Populate when fetching multiple items
+const { data: articles } = await articleService.findMany({
+  filters: { status: 'published' },
+  populate: ['author', 'categories', 'coverImage'],
+  sort: '-publishedAt',
+});
+
+articles.forEach(article => {
+  console.log(`${article.title} by ${article.author?.name}`);
+});
+```
+
+## Creating Relations
+
+When creating or updating content, use **documentId** (v5) or **id** (v4) to link relations.
+
+### Simple Relation Format
+
+<CodeGroup>
+```typescript Create with Relations (v5)
+import { articleService } from '@/strapi/collections/article/service';
+
+const newArticle = await articleService.create({
+  title: 'Getting Started with TypeScript',
+  slug: 'getting-started-typescript',
+  content: [],
+  
+  // To-one: use documentId string
+  author: 'author-doc-id-123',
+  
+  // To-many: use array of documentIds
+  categories: ['cat-doc-id-1', 'cat-doc-id-2'],
+  tags: ['tag-doc-id-a', 'tag-doc-id-b'],
+});
+```
+
+```typescript Create with Relations (v4)
+const newArticle = await articleService.create({
+  title: 'Getting Started with TypeScript',
+  slug: 'getting-started-typescript',
+  content: '',
+  
+  // To-one: use id number
+  author: 42,
+  
+  // To-many: use array of ids
+  categories: [1, 2],
+  tags: [10, 11, 12],
+});
+```
+
+```typescript Remove Relations
+// Remove to-one relation
+await articleService.update('abc123', {
+  author: null,
+});
+
+// Remove all to-many relations
+await articleService.update('abc123', {
+  categories: [],
+  tags: [],
+});
+```
+</CodeGroup>
+
+### Advanced Relation Format (Strapi v5)
+
+Strapi v5 supports advanced relation operations with `connect`, `disconnect`, and `set`:
+
+<Steps>
+  <Step title="connect">
+    Add relations while preserving existing ones
+    
+    ```typescript
+    await articleService.update('abc123', {
+      categories: {
+        connect: ['new-category-id'],
+      },
+    });
+    ```
+  </Step>
+  
+  <Step title="disconnect">
+    Remove specific relations without affecting others
+    
+    ```typescript
+    await articleService.update('abc123', {
+      tags: {
+        disconnect: ['tag-to-remove-id'],
+      },
+    });
+    ```
+  </Step>
+  
+  <Step title="set">
+    Replace ALL relations with a new set
+    
+    ```typescript
+    await articleService.update('abc123', {
+      categories: {
+        set: ['cat-1', 'cat-2', 'cat-3'],
+      },
+    });
+    ```
+  </Step>
+</Steps>
+
+<Accordion title="Full Advanced Relations Example">
+```typescript
+// Add and remove relations in one operation
+await articleService.update('abc123', {
+  categories: {
+    // Add new categories
+    connect: [
+      { documentId: 'new-cat-1' },
+      { documentId: 'new-cat-2', position: { start: true } },
+    ],
+    // Remove old categories
+    disconnect: [
+      { documentId: 'old-cat-1' },
+    ],
+  },
+});
+
+// With i18n and draft/publish
+await articleService.update('abc123', {
+  relatedArticles: {
+    connect: [
+      { 
+        documentId: 'related-1',
+        locale: 'en',
+        status: 'published',
+      },
+      {
+        documentId: 'related-2',
+        locale: 'fr',
+        status: 'draft',
+      },
+    ],
+  },
+});
+
+// Control ordering with position
+await articleService.update('abc123', {
+  sections: {
+    connect: [
+      { documentId: 'section-1', position: { start: true } },
+      { documentId: 'section-2', position: { after: 'section-1' } },
+      { documentId: 'section-3', position: { end: true } },
+    ],
+  },
+});
+```
+</Accordion>
+
+## Querying by Relations
+
+Filter content by related items:
+
+<CodeGroup>
+```typescript Filter by Relation ID
+// Find articles by a specific author
+const { data } = await articleService.findMany({
+  filters: {
+    author: { documentId: { $eq: 'author-123' } },
+  },
+});
+```
+
+```typescript Filter by Relation Field
+// Find articles by author name
+const { data } = await articleService.findMany({
+  filters: {
+    author: {
+      name: { $contains: 'John' },
+    },
+  },
+  populate: ['author'],
+});
+```
+
+```typescript Filter by Multiple Relations
+// Find articles in specific categories
+const { data } = await articleService.findMany({
+  filters: {
+    categories: {
+      slug: { $in: ['typescript', 'javascript'] },
+    },
+  },
+  populate: ['categories'],
+});
+```
+
+```typescript Complex Relation Filters
+// Find published articles by active authors in tech category
+const { data } = await articleService.findMany({
+  filters: {
+    status: 'published',
+    author: {
+      active: { $eq: true },
+    },
+    categories: {
+      slug: { $eq: 'tech' },
+    },
+  },
+  populate: ['author', 'categories'],
+});
+```
+</CodeGroup>
+
+## Real-World Examples
+
+### Blog with Author and Categories
+
+```astro pages/blog/[slug].astro
+---
+import { articleService } from '@/strapi/collections/article/service';
+import type { Article } from '@/strapi/collections/article/types';
+
+const { slug } = Astro.params;
+
+const article = await articleService.findBySlug(slug, {
+  populate: {
+    author: {
+      populate: ['avatar'],
+    },
+    categories: true,
+    tags: true,
+    coverImage: true,
+  },
+  status: 'published',
+});
+
+if (!article) {
+  return Astro.redirect('/404');
+}
+
+// Get related articles by same author
+const { data: relatedByAuthor } = await articleService.findMany({
+  filters: {
+    author: { documentId: { $eq: article.author?.documentId } },
+    documentId: { $ne: article.documentId },  // Exclude current
+    status: 'published',
+  },
+  pagination: { pageSize: 3 },
+  populate: ['coverImage'],
+});
+
+// Get related articles in same categories
+const categoryIds = article.categories.map(c => c.documentId);
+const { data: relatedByCategory } = await articleService.findMany({
+  filters: {
+    categories: {
+      documentId: { $in: categoryIds },
+    },
+    documentId: { $ne: article.documentId },
+    status: 'published',
+  },
+  pagination: { pageSize: 3 },
+  populate: ['coverImage', 'author'],
+});
+---
+
+<article>
+  <h1>{article.title}</h1>
+  
+  {article.author && (
+    <div class="author">
+      {article.author.avatar && (
+        <img src={article.author.avatar.url} alt={article.author.name} />
+      )}
+      <span>By {article.author.name}</span>
+    </div>
+  )}
+  
+  <div class="categories">
+    {article.categories.map(category => (
+      <a href={`/category/${category.slug}`}>{category.name}</a>
+    ))}
+  </div>
+  
+  <div class="tags">
+    {article.tags.map(tag => (
+      <span class="tag">{tag.name}</span>
+    ))}
+  </div>
+  
+  <div class="content">
+    {/* Article content */}
+  </div>
+  
+  {relatedByAuthor.length > 0 && (
+    <section>
+      <h2>More from {article.author?.name}</h2>
+      <div class="grid">
+        {relatedByAuthor.map(related => (
+          <ArticleCard article={related} />
+        ))}
+      </div>
+    </section>
+  )}
+  
+  {relatedByCategory.length > 0 && (
+    <section>
+      <h2>Related Articles</h2>
+      <div class="grid">
+        {relatedByCategory.map(related => (
+          <ArticleCard article={related} />
+        ))}
+      </div>
+    </section>
+  )}
+</article>
+```
+
+### Filter Articles by Category
+
+```astro pages/category/[slug].astro
+---
+import { categoryService } from '@/strapi/collections/category/service';
+import { articleService } from '@/strapi/collections/article/service';
+
+const { slug } = Astro.params;
+const page = Number(Astro.url.searchParams.get('page')) || 1;
+
+const category = await categoryService.findBySlug(slug);
+
+if (!category) {
+  return Astro.redirect('/404');
+}
+
+const { data: articles, pagination } = await articleService.findMany({
+  filters: {
+    categories: {
+      documentId: { $eq: category.documentId },
+    },
+    status: 'published',
+  },
+  sort: '-publishedAt',
+  pagination: { page, pageSize: 12 },
+  populate: ['author', 'coverImage'],
+});
+---
+
+<div>
+  <h1>{category.name}</h1>
+  {category.description && <p>{category.description}</p>}
+  
+  <div class="articles">
+    {articles.map(article => (
+      <ArticleCard article={article} />
+    ))}
+  </div>
+  
+  <Pagination 
+    currentPage={pagination.page}
+    totalPages={pagination.pageCount}
+  />
+</div>
+```
+
+### Author Profile with Articles
+
+```astro pages/author/[slug].astro
+---
+import { authorService } from '@/strapi/collections/author/service';
+import { articleService } from '@/strapi/collections/article/service';
+
+const { slug } = Astro.params;
+
+const author = await authorService.findBySlug(slug, {
+  populate: ['avatar', 'socialLinks'],
+});
+
+if (!author) {
+  return Astro.redirect('/404');
+}
+
+// Get all articles by this author
+const { data: articles, pagination } = await articleService.findMany({
+  filters: {
+    author: {
+      documentId: { $eq: author.documentId },
+    },
+    status: 'published',
+  },
+  sort: '-publishedAt',
+  populate: ['coverImage', 'categories'],
+});
+
+// Get article count
+const articleCount = await articleService.count({
+  author: { documentId: { $eq: author.documentId } },
+  status: 'published',
+});
+---
+
+<div class="author-profile">
+  <div class="author-header">
+    {author.avatar && (
+      <img src={author.avatar.url} alt={author.name} class="avatar" />
+    )}
+    <h1>{author.name}</h1>
+    {author.bio && <p>{author.bio}</p>}
+    <p>{articleCount} articles published</p>
+  </div>
+  
+  <div class="articles">
+    <h2>Articles by {author.name}</h2>
+    {articles.map(article => (
+      <ArticleCard article={article} />
+    ))}
+  </div>
+</div>
+```
+
+## Bidirectional Relations
+
+When relations are bidirectional (defined on both sides), Strapi keeps them in sync:
+
+```typescript
+// Article has many Categories
+// Category has many Articles
+
+// Adding a category to an article...
+await articleService.update('article-123', {
+  categories: {
+    connect: ['category-456'],
+  },
+});
+
+// ...automatically updates the category's articles
+const category = await categoryService.findOne('category-456', {
+  populate: ['articles'],
+});
+// category.articles now includes article-123
+```
+
+<Tip>
+Bidirectional relations are updated automatically by Strapi. You only need to update one side.
+</Tip>
+
+## Performance Tips
+
+<AccordionGroup>
+  <Accordion title="Only populate what you need">
+    ```typescript
+    // Bad: Over-fetching
+    const article = await articleService.findOne('abc123', {
+      populate: '*',
+    });
+    
+    // Good: Selective population
+    const article = await articleService.findOne('abc123', {
+      populate: ['author', 'coverImage'],
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Avoid deep nesting">
+    ```typescript
+    // Can be slow with large datasets
+    const article = await articleService.findOne('abc123', {
+      populate: {
+        author: {
+          populate: {
+            articles: {
+              populate: ['categories', 'tags'],
+            },
+          },
+        },
+      },
+    });
+    
+    // Better: Fetch separately if needed
+    const article = await articleService.findOne('abc123', {
+      populate: ['author'],
+    });
+    
+    if (article.author) {
+      const { data: authorArticles } = await articleService.findMany({
+        filters: { author: { documentId: { $eq: article.author.documentId } } },
+        pagination: { pageSize: 5 },
+      });
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use pagination for to-many relations">
+    If a content type has hundreds of relations, consider paginating:
+    
+    ```typescript
+    // Instead of populating all articles
+    const category = await categoryService.findOne('cat-123', {
+      populate: ['articles'],  // Could be 1000+ items
+    });
+    
+    // Fetch articles separately with pagination
+    const category = await categoryService.findOne('cat-123');
+    const { data: articles } = await articleService.findMany({
+      filters: { categories: { documentId: { $eq: 'cat-123' } } },
+      pagination: { page: 1, pageSize: 20 },
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Media" icon="image" href="/guides/media">
+    Work with images and file uploads
+  </Card>
+  <Card title="Services" icon="code" href="/guides/services">
+    Learn more about service methods
+  </Card>
+  <Card title="Types" icon="shield" href="/guides/types">
+    Understand generated TypeScript types
+  </Card>
+  <Card title="Schemas" icon="shield-check" href="/guides/schemas">
+    Validate relation data with Zod
+  </Card>
+</CardGroup>
